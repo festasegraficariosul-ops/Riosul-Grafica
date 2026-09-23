@@ -1,0 +1,25 @@
+{
+  "summary": "Etapa 2 backend testing for Rio Sul Festas & Gráfica: 35/35 tests passed (100%). Verified real catalog seed (16 categories, 60+ products with fixed/per_m2/variations/tiered/starting_price structures), image + favorite fields, favorite toggle, customer without Instagram, sale PUT preserving order_number, sale duplicate creating new order (paid=0, status reset), auto-create customer on sale, uploads + attachments CRUD, PDF Nota do Pedido, PDF Ordem de Produção, Price Tables CRUD with RBAC, Shopee ZIP import (with extraction of Nº do Pedido and Destinatário from PDF text using pdfplumber), non-ZIP rejection, .zip extension check, duplicate detection on reimport, list/filter, PUT update, add image, ficha PDF, batch PDF (mode=both), admin-only DELETE. Legacy endpoints (/dashboard, /cash/closure, /reports/sales, /vales, /users) still working. RBAC still enforced (vendedor 403 on products/vales/price-tables).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/etapa2_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 1130 lines - exceeds 700 line guideline; consider splitting into modules (auth, catalog, sales, shopee, pdf).",
+    "seed_real_catalog() reuses the demo_names list for cleanup which includes 'Adesivos', 'Impressões', etc. that are ALSO real category names - only saved by the 'no products' check, but fragile. Consider tagging cleanup targets explicitly.",
+    "PUT /sales/{sid} accepts a SaleIn but does not preserve seller_id/seller_name from original sale - if a vendedor edits their sale, no ownership issue, but if admin edits a vendedor's sale, still preserves it correctly since we don't overwrite; verified in test. However SaleIn.model_dump() will strip attachments if the caller doesn't send them because attachments has default []. Caller must resend attachments to avoid loss on PUT.",
+    "CustomerIn silently accepts unknown fields (Pydantic default extra='ignore'); frontend can still send 'instagram' but it's stripped - acceptable but could be explicit with model_config extra='forbid'.",
+    "shopee_import duplicate detection: check is `identified: True` gated - so unidentified reimports would still duplicate. Working as designed per problem statement.",
+    "DELETE /sales/{sid}/attachments uses query param `url` - unusual for DELETE payload but works; ensure frontend uses matching pattern."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend only)"},
+  "test_credentials": "Admin festasegraficariosul@gmail.com/RioSul@2026, Vendedor vendedor@riosul.com/Vendedor@2026",
+  "seed_data_creation": "Tests created TEST_-prefixed customers, sales, and a price table (deleted). Shopee test orders imported and one deleted; remaining test shopee orders persist and can be cleaned by admin later.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Etapa 2 fully covered by /app/backend/tests/backend_test.py. Uses BASE_URL from env. Requires reportlab & pdfplumber (already deps) to build test PDFs. Two shopee_orders remain in DB from tests (customer MARIA SILVA and JOAO SANTOS) - can be filtered by TEST_UPDATED customer_name or removed manually."
+}

@@ -1,45 +1,44 @@
 # PRD — Rio Sul Festas & Gráfica
 
 ## Original Problem Statement
-Sistema web completo de gestão de vendas, pedidos, clientes, funcionários e caixa para a gráfica Rio Sul Festas & Gráfica. Substituir planilha por sistema com catálogo pré-cadastrado, venda rápida no balcão, kanban de pedidos, fechamento de caixa, relatórios, importação de tabela de preços e conversor ZPL→PDF (Shopee).
+Sistema web completo para gestão de vendas, pedidos, clientes, funcionários e caixa da Rio Sul Festas & Gráfica com Central Shopee, tabelas de preços, PDFs de nota e ordem de produção.
 
-## Architecture
-- **Backend**: FastAPI (single `server.py`), MongoDB via Motor, JWT com bcrypt (cookies + Bearer), roles admin/vendedor com enforcement no backend.
-- **Frontend**: React 19 + React Router 7, Tailwind, Shadcn UI, Recharts, Sonner, Lucide.
-- **Integrações**: Labelary API pública (ZPL→PNG/PDF), pandas + openpyxl (import CSV/XLSX).
-
-## User Personas
-- **Administrador (proprietário)**: catálogo, preços, funcionários, relatórios, caixa, vales, configurações.
-- **Vendedor**: nova venda, clientes, consulta catálogo, próprias vendas, kanban pedidos, etiquetas Shopee.
-
-## Implemented (2026-09-23)
-- Auth JWT + admin seed (festasegraficariosul@gmail.com) + vendedor demo.
-- Categorias, Produtos com variações + tipos de preço (fixo/variável/por m²) + calculadora m² com valor mínimo.
-- Nova Venda: grid de categorias/produtos, busca instantânea, carrinho lateral, cliente por telefone, desconto/acréscimo, pagamento dividido, canal/status/prazo.
-- Snapshot de preço (venda antiga não muda quando preço oficial é alterado).
-- Vendas: lista + detalhe + status + pagamentos parciais + copiar para WhatsApp + cancelar (admin).
-- Pedidos: Kanban drag-drop entre status + lista.
-- Clientes com histórico, total gasto e pendentes.
-- Dashboard: KPIs (vendas, faturamento, ticket médio, a receber, produção, prontos, atrasados) + gráficos (diário, canal, vendedor).
-- Fechamento de caixa por data e vendedor com breakdown por forma de pagamento.
-- Vales por funcionário.
-- Relatórios (dia/mês/vendedor/canal + top produtos) + export CSV.
-- Importação CSV/XLSX de produtos com prévia + agrupamento de variações.
-- Etiquetas Shopee: ZPL→PNG preview + ZPL→PDF 10x15cm via Labelary.
-- Configurações (dados da empresa, canais, formas de pagamento, unidades).
+## Etapa 2 (2026-09-23) — Melhorias
+- Logo oficial da Rio Sul incorporada em toda a interface.
+- Catálogo real semeado (16 categorias, 60+ produtos) com preços editáveis.
+- Novos tipos de preço: `tiered` (apostilas por faixa de folhas) + flag `is_starting_price` ("a partir de") + campos `image_url` e `favorite` em produtos.
+- Nova Venda com: cards com imagens, seção "Mais vendidos" (histórico real), filtro Favoritos, busca em produto/categoria/variação, calculadora M², calculadora por faixa (apostilas).
+- Edição completa de pedido em `/vendas/:id/editar` (mesma UI da Nova Venda pré-preenchida — PUT mantém `order_number`).
+- Duplicar pedido: `POST /api/sales/{id}/duplicate` gera novo pedido zerando pagamentos.
+- Cliente criado automaticamente ao finalizar a venda (busca por telefone antes de duplicar).
+- Instagram removido do cadastro de clientes.
+- Anexos em pedidos: upload/paste (Ctrl+V)/arraste — armazenados em `/app/backend/uploads/` servidos via `/api/uploads/{fn}`.
+- Nota do Pedido PDF (`GET /api/sales/{id}/pdf/note`) e Ordem de Produção PDF (`GET /api/sales/{id}/pdf/production`) via reportlab, layout branco A4 com logo.
+- Módulo Tabelas de Preços (`/tabelas`): upload de imagem + gerador automático via Canvas (preços atuais do catálogo) + copiar/baixar/link.
+- Central Shopee (`/shopee`) — substitui a antiga tela ZPL:
+  - Upload de ZIP com validações (extensão, magic bytes PK, path traversal, limites de tamanho/arquivos).
+  - Extração página a página de PDFs; identificação automática de cliente + nº do pedido via pdfplumber (regex + fallback SHIP TO).
+  - Deduplicação por número + status "não identificado" quando faltar dado.
+  - Anexar imagens do produto por pedido (upload).
+  - Ficha de separação PDF (grande, com imagem) + PDFs em lote (Etiquetas / Fichas / Ambos) agrupados por cliente.
+  - Status internos: AGUARDANDO IMAGEM → PRONTO PARA PRODUÇÃO → EM PRODUÇÃO → PRODUZIDO → SEPARADO → DESPACHADO.
+  - Filtros por status/cliente/nº, histórico persistido no banco.
+- Configurações agora inclui CNPJ e email; footer do PDF configurável.
 
 ## Test Credentials
 - Admin: festasegraficariosul@gmail.com / RioSul@2026
 - Vendedor: vendedor@riosul.com / Vendedor@2026
 
-## Backlog (P1)
-- Preços por faixa de quantidade (tiered) — modelo backend já preparado, precisa UI na venda.
-- Adicionais em apostilas (encadernação/wire-o/capa).
-- Export PDF de relatórios e comprovante impresso.
-- Auditoria detalhada com diff de campos.
-- Filtros do Dashboard (hoje/ontem/semana/mês/anterior/customizado).
+## Backend endpoints novos
+- `POST /api/uploads`, `GET /api/uploads/{fn}`
+- `PUT /api/products/{pid}/favorite`
+- `POST /api/sales/{sid}/duplicate`, `POST/DELETE /api/sales/{sid}/attachments`
+- `GET /api/sales/{sid}/pdf/note`, `.../pdf/production`
+- `CRUD /api/price-tables`
+- `POST /api/shopee/import`, `GET/PUT/DELETE /api/shopee/orders/{oid}`, `POST /api/shopee/orders/{oid}/images`, `GET /api/shopee/orders/{oid}/ficha`, `POST /api/shopee/batch-pdf`
 
-## Backlog (P2)
-- Notificações WhatsApp automáticas de status.
-- Backup automático agendado.
-- Modo balcão (touch-friendly full-screen).
+## Backlog
+- P1: Combos automáticos com itens no carrinho, Wire-O/Espiral/Capa como adicionais visíveis nas apostilas.
+- P1: Compartilhamento via Web Share API (WhatsApp direto) para tabelas.
+- P2: Auditoria detalhada com diff de campos, filtros de período rápido no dashboard.
+- P2: Notificações WhatsApp automáticas de status.
