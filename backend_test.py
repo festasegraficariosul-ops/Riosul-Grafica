@@ -10,6 +10,7 @@ import json
 
 # Configuration
 BASE_URL = "https://eb37b9d8-61b4-46ff-bf7b-5fcd9d03495c.preview.emergentagent.com/api"
+FRONTEND_ORIGIN = "https://eb37b9d8-61b4-46ff-bf7b-5fcd9d03495c.preview.emergentagent.com"
 ADMIN_EMAIL = "festasegraficariosul@gmail.com"
 ADMIN_PASSWORD = "02578491"
 
@@ -46,15 +47,96 @@ def test_backend_health():
         log_test("Backend Health Check", False, f"Backend not responding: {str(e)}")
         return False
 
-def test_admin_login():
-    """Test 2: Admin login with restored credentials"""
+def test_cors_preflight():
+    """Test 2: CORS preflight for POST /api/auth/login"""
     try:
+        # Send OPTIONS request with Origin header (simulating browser preflight)
+        headers = {
+            "Origin": FRONTEND_ORIGIN,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type"
+        }
+        
+        response = requests.options(
+            f"{BASE_URL}/auth/login",
+            headers=headers,
+            timeout=10
+        )
+        
+        # Check status code (should be 200 for successful preflight)
+        if response.status_code != 200:
+            log_test("CORS Preflight - Status Code", False, 
+                    f"Expected 200, got {response.status_code}")
+            return False
+        
+        log_test("CORS Preflight - Status Code", True, "Received 200 OK")
+        
+        # Check Access-Control-Allow-Origin header
+        allow_origin = response.headers.get("Access-Control-Allow-Origin")
+        if not allow_origin:
+            log_test("CORS Preflight - Allow-Origin Header", False, 
+                    "Access-Control-Allow-Origin header not present")
+            return False
+        
+        if allow_origin != FRONTEND_ORIGIN:
+            log_test("CORS Preflight - Allow-Origin Value", False, 
+                    f"Expected '{FRONTEND_ORIGIN}', got '{allow_origin}'")
+        else:
+            log_test("CORS Preflight - Allow-Origin Value", True, 
+                    f"Correct origin: {allow_origin}")
+        
+        # Check Access-Control-Allow-Credentials header
+        allow_credentials = response.headers.get("Access-Control-Allow-Credentials")
+        if not allow_credentials:
+            log_test("CORS Preflight - Allow-Credentials Header", False, 
+                    "Access-Control-Allow-Credentials header not present")
+        elif allow_credentials.lower() != "true":
+            log_test("CORS Preflight - Allow-Credentials Value", False, 
+                    f"Expected 'true', got '{allow_credentials}'")
+        else:
+            log_test("CORS Preflight - Allow-Credentials Value", True, 
+                    "Credentials enabled: true")
+        
+        # Check Access-Control-Allow-Methods
+        allow_methods = response.headers.get("Access-Control-Allow-Methods")
+        if allow_methods:
+            log_test("CORS Preflight - Allow-Methods Header", True, 
+                    f"Methods: {allow_methods}")
+        else:
+            log_test("CORS Preflight - Allow-Methods Header", False, 
+                    "Access-Control-Allow-Methods header not present")
+        
+        # Check Access-Control-Allow-Headers
+        allow_headers = response.headers.get("Access-Control-Allow-Headers")
+        if allow_headers:
+            log_test("CORS Preflight - Allow-Headers Header", True, 
+                    f"Headers: {allow_headers}")
+        else:
+            log_test("CORS Preflight - Allow-Headers Header", False, 
+                    "Access-Control-Allow-Headers header not present")
+        
+        return True
+        
+    except Exception as e:
+        log_test("CORS Preflight - Request", False, f"Exception: {str(e)}")
+        return False
+
+def test_admin_login():
+    """Test 3: Admin login with restored credentials"""
+    try:
+        # Include Origin header to simulate real browser request
+        headers = {
+            "Origin": FRONTEND_ORIGIN,
+            "Content-Type": "application/json"
+        }
+        
         response = requests.post(
             f"{BASE_URL}/auth/login",
             json={
                 "email": ADMIN_EMAIL,
                 "password": ADMIN_PASSWORD
             },
+            headers=headers,
             timeout=10
         )
         
@@ -65,6 +147,21 @@ def test_admin_login():
             return None
         
         log_test("Admin Login - Status Code", True, "Received 200 OK")
+        
+        # Check CORS headers on actual POST request
+        allow_origin = response.headers.get("Access-Control-Allow-Origin")
+        if allow_origin == FRONTEND_ORIGIN:
+            log_test("Admin Login - CORS Allow-Origin", True, f"Correct origin: {allow_origin}")
+        else:
+            log_test("Admin Login - CORS Allow-Origin", False, 
+                    f"Expected '{FRONTEND_ORIGIN}', got '{allow_origin}'")
+        
+        allow_credentials = response.headers.get("Access-Control-Allow-Credentials")
+        if allow_credentials and allow_credentials.lower() == "true":
+            log_test("Admin Login - CORS Allow-Credentials", True, "Credentials enabled")
+        else:
+            log_test("Admin Login - CORS Allow-Credentials", False, 
+                    f"Expected 'true', got '{allow_credentials}'")
         
         # Parse response
         try:
@@ -127,7 +224,7 @@ def test_admin_login():
         return None
 
 def test_auth_me(auth_data):
-    """Test 3: Validate GET /api/auth/me with token"""
+    """Test 4: Validate GET /api/auth/me with token"""
     if not auth_data:
         log_test("Auth Me - Skipped", False, "No auth data from login")
         return False
@@ -185,7 +282,7 @@ def test_auth_me(auth_data):
         return False
 
 def test_no_duplicate_users(auth_data):
-    """Test 4: Check that admin user is not duplicated (optional)"""
+    """Test 5: Check that admin user is not duplicated (optional)"""
     if not auth_data:
         log_test("No Duplicate Users - Skipped", False, "No auth data from login")
         return False
@@ -248,9 +345,10 @@ def test_no_duplicate_users(auth_data):
 def main():
     """Run all tests"""
     print("=" * 80)
-    print("BACKEND TEST SUITE - Admin Restoration Flow")
+    print("BACKEND TEST SUITE - CORS Fix & Admin Login Validation")
     print("=" * 80)
     print(f"Base URL: {BASE_URL}")
+    print(f"Frontend Origin: {FRONTEND_ORIGIN}")
     print(f"Admin Email: {ADMIN_EMAIL}")
     print("=" * 80)
     print()
@@ -266,20 +364,26 @@ def main():
         print_summary()
         sys.exit(1)
     
-    # Test 2: Admin login
-    print("TEST 2: Admin Login")
+    # Test 2: CORS preflight
+    print("TEST 2: CORS Preflight (OPTIONS /api/auth/login)")
+    print("-" * 80)
+    test_cors_preflight()
+    print()
+    
+    # Test 3: Admin login
+    print("TEST 3: Admin Login with CORS Headers")
     print("-" * 80)
     auth_data = test_admin_login()
     print()
     
-    # Test 3: Auth me
-    print("TEST 3: Authenticated User Info (/auth/me)")
+    # Test 4: Auth me
+    print("TEST 4: Authenticated User Info (/auth/me)")
     print("-" * 80)
     test_auth_me(auth_data)
     print()
     
-    # Test 4: No duplicate users
-    print("TEST 4: No Duplicate Admin Users")
+    # Test 5: No duplicate users
+    print("TEST 5: No Duplicate Admin Users")
     print("-" * 80)
     test_no_duplicate_users(auth_data)
     print()

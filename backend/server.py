@@ -31,6 +31,12 @@ client = AsyncIOMotorClient(os.environ['MONGO_URL'])
 db = client[os.environ['DB_NAME']]
 
 app = FastAPI(title="Rio Sul API")
+
+# CORS middleware must be added early, before routes
+FRONTEND_URL = os.environ["FRONTEND_URL"]
+app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=[FRONTEND_URL],
+    allow_methods=["*"], allow_headers=["*"])
+
 api = APIRouter(prefix="/api")
 
 def hash_pw(p: str) -> str:
@@ -1122,8 +1128,6 @@ async def shopee_batch(payload: Dict[str, Any], user=Depends(get_user)):
         headers={"Content-Disposition": "attachment; filename=pedidos_shopee.pdf"})
 
 app.include_router(api)
-app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"],
-    allow_origin_regex=".*", allow_methods=["*"], allow_headers=["*"])
 
 @app.on_event("shutdown")
 async def _shutdown(): client.close()
