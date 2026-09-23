@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { brl } from "@/lib/format";
-import { Plus, Trash2, Edit, Upload, X } from "lucide-react";
+import { Plus, Trash2, Edit, Upload, X, Star, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 
 const PRICE_TYPES = [{v:"fixed",l:"Preço fixo"},{v:"variable",l:"Preço informado na venda"},{v:"per_m2",l:"Por m²"}];
@@ -16,7 +16,9 @@ export default function Produtos() {
   const load = () => api.get("/products").then((r) => setList(r.data));
   useEffect(() => { load(); api.get("/categories").then(r => setCats(r.data)); api.get("/units").then(r => setUnits(r.data)); }, []);
 
-  const newProduct = () => setForm({ name: "", category_id: cats[0]?.id, description: "", price: 0, price_type: "fixed", unit: "Unidade", sku: "", active: true, order: 0, variations: [], m2_min_price: 0, m2_price: 0 });
+  const newProduct = () => setForm({ name: "", category_id: cats[0]?.id, description: "", price: 0, price_type: "fixed", unit: "Unidade", sku: "", active: true, order: 0, variations: [], m2_min_price: 0, m2_price: 0, image_url: "", favorite: false, is_starting_price: false });
+
+  const toggleFav = async (p) => { await api.put(`/products/${p.id}/favorite`, { favorite: !p.favorite }); load(); };
 
   const save = async () => {
     if (!form.name || !form.category_id) return toast.error("Nome e categoria obrigatórios");
@@ -40,15 +42,17 @@ export default function Produtos() {
       </div>
       <div className="card-riosul overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-xs text-zinc-500 uppercase"><tr><th className="text-left px-3 py-2">Produto</th><th>Categoria</th><th>Preço</th><th>Tipo</th><th>Variações</th><th></th></tr></thead>
+          <thead className="text-xs text-zinc-500 uppercase"><tr><th className="text-left px-3 py-2">Img</th><th className="text-left">Produto</th><th>Categoria</th><th>Preço</th><th>Tipo</th><th>Var.</th><th>Fav</th><th></th></tr></thead>
           <tbody>
             {list.map((p) => (
               <tr key={p.id} className={`border-t border-zinc-800/60 ${!p.active ? "opacity-50" : ""}`}>
-                <td className="px-3 py-2 text-white">{p.name}</td>
+                <td className="px-3 py-2">{p.image_url ? <img src={p.image_url} alt="" className="w-10 h-10 rounded object-cover" /> : <div className="w-10 h-10 rounded bg-zinc-900" />}</td>
+                <td className="text-white">{p.name}</td>
                 <td className="text-zinc-400">{cats.find(c => c.id === p.category_id)?.name}</td>
                 <td className="text-yellow-400 font-mono">{p.price_type === "fixed" ? brl(p.price) : PRICE_TYPES.find(t => t.v === p.price_type)?.l}</td>
                 <td className="text-zinc-400 text-xs">{p.price_type}</td>
                 <td className="text-zinc-400 text-xs">{p.variations?.length || 0}</td>
+                <td><button onClick={() => toggleFav(p)}><Star size={16} className={p.favorite ? "text-yellow-400 fill-yellow-400" : "text-zinc-600"} /></button></td>
                 <td className="text-right pr-3"><button onClick={() => setForm(p)} className="text-cyan-400 mr-2"><Edit size={14} /></button><button onClick={() => del(p.id)} className="text-red-400"><Trash2 size={14} /></button></td>
               </tr>
             ))}
@@ -90,7 +94,25 @@ function ProductModal({ form, setForm, onClose, onSave, cats, units }) {
             <div><label className="text-xs text-zinc-500">Valor mínimo</label><input type="number" step="0.01" value={form.m2_min_price} onChange={(e) => setForm({ ...form, m2_min_price: Number(e.target.value) })} className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-white" /></div>
           </>)}
           <div className="col-span-2"><label className="text-xs text-zinc-500">Descrição</label><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-white" /></div>
-          <label className="col-span-2 flex items-center gap-2 text-white text-sm"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Ativo</label>
+          <div className="col-span-2">
+            <label className="text-xs text-zinc-500">URL da imagem</label>
+            <div className="flex gap-2">
+              <input value={form.image_url || ""} onChange={(e) => setForm({ ...form, image_url: e.target.value })} placeholder="https://... ou faça upload" className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-white" />
+              <label className="cursor-pointer bg-cyan-500 text-white text-xs font-bold px-3 rounded flex items-center gap-1">
+                <Upload size={12} /> Upload
+                <input type="file" accept="image/*" hidden onChange={async (e) => {
+                  const f = e.target.files[0]; if (!f) return;
+                  const fd = new FormData(); fd.append("file", f);
+                  const { data } = await api.post("/uploads", fd, { headers: { "Content-Type": "multipart/form-data" } });
+                  setForm({ ...form, image_url: data.url });
+                }} />
+              </label>
+            </div>
+            {form.image_url && <img src={form.image_url} alt="preview" className="mt-2 w-32 h-32 object-cover rounded border border-zinc-800" />}
+          </div>
+          <label className="flex items-center gap-2 text-white text-sm"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Ativo</label>
+          <label className="flex items-center gap-2 text-white text-sm"><input type="checkbox" checked={form.favorite || false} onChange={(e) => setForm({ ...form, favorite: e.target.checked })} /> Favorito</label>
+          <label className="col-span-2 flex items-center gap-2 text-white text-sm"><input type="checkbox" checked={form.is_starting_price || false} onChange={(e) => setForm({ ...form, is_starting_price: e.target.checked })} /> Preço "A partir de" (pergunta valor final na venda)</label>
           <div className="col-span-2">
             <div className="flex justify-between items-center mb-2"><label className="text-xs text-zinc-500 uppercase">Variações</label><button onClick={addVar} className="text-cyan-400 text-xs flex items-center gap-1"><Plus size={12} /> Adicionar</button></div>
             {form.variations?.map((v, i) => (

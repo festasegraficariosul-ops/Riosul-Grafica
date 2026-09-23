@@ -7,7 +7,7 @@ import { toast } from "sonner";
 export default function Clientes() {
   const [list, setList] = useState([]);
   const [q, setQ] = useState("");
-  const [form, setForm] = useState({ name: "", phone: "", instagram: "", notes: "" });
+  const [form, setForm] = useState({ name: "", phone: "", notes: "" });
   const [detail, setDetail] = useState(null);
 
   const load = () => api.get("/customers", { params: q ? { q } : {} }).then(r => setList(r.data));
@@ -17,7 +17,7 @@ export default function Clientes() {
     if (!form.name) return toast.error("Nome obrigatório");
     if (form.id) await api.put(`/customers/${form.id}`, form);
     else await api.post("/customers", form);
-    setForm({ name: "", phone: "", instagram: "", notes: "" });
+    setForm({ name: "", phone: "", notes: "" });
     load(); toast.success("Salvo");
   };
 
@@ -33,7 +33,6 @@ export default function Clientes() {
           <div className="text-sm font-semibold text-white">Novo/editar cliente</div>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome" className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-white text-sm" data-testid="customer-name" />
           <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Telefone/WhatsApp" className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-white text-sm" data-testid="customer-phone" />
-          <input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} placeholder="Instagram" className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-white text-sm" />
           <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Observações" rows={2} className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-white text-sm" />
           <button onClick={save} data-testid="save-customer" className="w-full bg-gradient-to-r from-pink-500 to-cyan-500 text-white font-bold py-2 rounded"><Plus size={14} className="inline" /> Salvar</button>
         </div>

@@ -3,7 +3,7 @@ import api from "@/lib/api";
 import { brl } from "@/lib/format";
 import { Link } from "react-router-dom";
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar } from "recharts";
-import { ShoppingCart, DollarSign, Package, Clock, AlertTriangle, TrendingUp, Users, Tag, Calculator, Plus } from "lucide-react";
+import { ShoppingCart, DollarSign, Package, Clock, AlertTriangle, TrendingUp, Users, Table2, ShoppingBag, Calculator, Plus } from "lucide-react";
 
 const Kpi = ({ label, value, icon: Icon, accent = "cyan" }) => {
   const map = { cyan: "text-cyan-400 border-cyan-500/30", pink: "text-pink-400 border-pink-500/30",
@@ -26,11 +26,12 @@ export default function Dashboard() {
   if (!data) return <div className="text-zinc-500">Carregando...</div>;
 
   const shortcuts = [
-    { to: "/nova-venda", label: "Nova Venda", icon: Plus, color: "pink" },
-    { to: "/clientes", label: "Clientes", icon: Users, color: "cyan" },
-    { to: "/pedidos", label: "Pedidos", icon: Package, color: "yellow" },
-    { to: "/caixa", label: "Fechar Caixa", icon: Calculator, color: "green" },
-    { to: "/etiquetas-shopee", label: "Etiquetas", icon: Tag, color: "pink" },
+    { to: "/nova-venda", label: "Nova Venda", icon: Plus },
+    { to: "/clientes", label: "Clientes", icon: Users },
+    { to: "/pedidos", label: "Pedidos", icon: Package },
+    { to: "/caixa", label: "Fechar Caixa", icon: Calculator },
+    { to: "/tabelas", label: "Tabelas de Preços", icon: Table2 },
+    { to: "/shopee", label: "Central Shopee", icon: ShoppingBag },
   ];
 
   return (

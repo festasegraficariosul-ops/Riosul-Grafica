@@ -15,8 +15,9 @@ import Funcionarios from "@/pages/Funcionarios";
 import Vales from "@/pages/Vales";
 import Caixa from "@/pages/Caixa";
 import Relatorios from "@/pages/Relatorios";
-import Etiquetas from "@/pages/Etiquetas";
+import CentralShopee from "@/pages/CentralShopee";
 import Configuracoes from "@/pages/Configuracoes";
+import TabelasPrecos from "@/pages/TabelasPrecos";
 
 function Protected({ children, adminOnly = false }) {
   const { user, loading } = useAuth();
@@ -37,10 +38,12 @@ export default function App() {
             <Route path="/nova-venda" element={<NovaVenda />} />
             <Route path="/vendas" element={<Vendas />} />
             <Route path="/vendas/:id" element={<VendaDetail />} />
+            <Route path="/vendas/:id/editar" element={<NovaVenda editMode />} />
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/pedidos" element={<Pedidos />} />
             <Route path="/caixa" element={<Caixa />} />
-            <Route path="/etiquetas-shopee" element={<Etiquetas />} />
+            <Route path="/tabelas" element={<TabelasPrecos />} />
+            <Route path="/shopee" element={<CentralShopee />} />
             <Route path="/produtos" element={<Protected adminOnly><Produtos /></Protected>} />
             <Route path="/categorias" element={<Protected adminOnly><Categorias /></Protected>} />
             <Route path="/funcionarios" element={<Protected adminOnly><Funcionarios /></Protected>} />

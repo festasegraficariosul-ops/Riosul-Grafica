@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Logo from "./Logo";
 import { LayoutDashboard, ShoppingCart, ListOrdered, Users, ClipboardList, Package, Tags, UserCog,
-  Wallet, Calculator, BarChart3, Tag, Settings, LogOut, Menu, X } from "lucide-react";
+  Wallet, Calculator, BarChart3, Table2, ShoppingBag, Settings, LogOut, Menu, X } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 
 const nav = [
@@ -17,8 +17,9 @@ const nav = [
   { to: "/funcionarios", label: "Funcionários", icon: UserCog, admin: true },
   { to: "/vales", label: "Vales", icon: Wallet, admin: true },
   { to: "/caixa", label: "Fechamento Caixa", icon: Calculator },
+  { to: "/tabelas", label: "Tabelas de Preços", icon: Table2 },
   { to: "/relatorios", label: "Relatórios", icon: BarChart3, admin: true },
-  { to: "/etiquetas-shopee", label: "Etiquetas Shopee", icon: Tag },
+  { to: "/shopee", label: "Central Shopee", icon: ShoppingBag },
   { to: "/configuracoes", label: "Configurações", icon: Settings, admin: true },
 ];
 

@@ -1,21 +1,16 @@
 import React, { useEffect, useState } from "react";
-import api from "@/lib/api";
+import api, { API } from "@/lib/api";
 import { brl, fmtDate } from "@/lib/format";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { Search, Eye, Copy, X, DollarSign, Trash2 } from "lucide-react";
+import { Eye, Copy, X, Edit, FileText, ClipboardList, Copy as Duplicate, Paperclip, Trash2, Printer, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
 export function Vendas() {
   const [sales, setSales] = useState([]);
-  const [q, setQ] = useState("");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [q, setQ] = useState(""); const [start, setStart] = useState(""); const [end, setEnd] = useState("");
   const load = () => {
-    const params = {};
-    if (q) params.q = q;
-    if (start) params.start = start;
-    if (end) params.end = end;
+    const params = {}; if (q) params.q = q; if (start) params.start = start; if (end) params.end = end;
     api.get("/sales", { params }).then((r) => setSales(r.data));
   };
   useEffect(() => { load(); }, []);
@@ -34,11 +29,9 @@ export function Vendas() {
       <div className="card-riosul overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="text-xs text-zinc-500 uppercase bg-zinc-950/60">
-            <tr>
-              <th className="text-left px-3 py-2">#</th><th className="text-left">Data</th><th className="text-left">Vendedor</th>
+            <tr><th className="text-left px-3 py-2">#</th><th className="text-left">Data</th><th className="text-left">Vendedor</th>
               <th className="text-left">Cliente</th><th className="text-left">Canal</th><th className="text-right">Total</th>
-              <th className="text-right">Saldo</th><th className="text-left">Status</th><th></th>
-            </tr>
+              <th className="text-right">Saldo</th><th className="text-left">Status</th><th></th></tr>
           </thead>
           <tbody>
             {sales.map((s) => (
@@ -63,8 +56,7 @@ export function Vendas() {
 }
 
 export function VendaDetail() {
-  const { id } = useParams();
-  const nav = useNavigate();
+  const { id } = useParams(); const nav = useNavigate();
   const { user } = useAuth();
   const [sale, setSale] = useState(null);
   const [methods, setMethods] = useState([]);
@@ -76,6 +68,25 @@ export function VendaDetail() {
   const changeStatus = async (s) => { await api.put(`/sales/${id}/status`, { status: s }); toast.success("Status atualizado"); load(); };
   const addPayment = async () => { if (!pay.amount) return; await api.post(`/sales/${id}/payment`, pay); toast.success("Pagamento registrado"); load(); };
   const cancelSale = async () => { if (!confirm("Cancelar venda?")) return; await api.delete(`/sales/${id}`); toast.success("Cancelada"); load(); };
+  const duplicate = async () => {
+    const { data } = await api.post(`/sales/${id}/duplicate`);
+    toast.success(`Pedido duplicado como #${data.order_number}`);
+    nav(`/vendas/${data.id}`);
+  };
+  const openPdf = (mode) => {
+    const t = localStorage.getItem("access_token");
+    window.open(`${API}/sales/${id}/pdf/${mode}?_t=${Date.now()}&auth=${encodeURIComponent(t||"")}`, "_blank");
+  };
+  const uploadAttachment = async (file) => {
+    const fd = new FormData(); fd.append("file", file);
+    const { data } = await api.post("/uploads", fd, { headers: { "Content-Type": "multipart/form-data" } });
+    await api.post(`/sales/${id}/attachments`, { url: data.url });
+    toast.success("Anexo adicionado"); load();
+  };
+  const onPaste = (e) => {
+    for (const it of e.clipboardData.items) if (it.type.startsWith("image/")) { uploadAttachment(it.getAsFile()); e.preventDefault(); return; }
+  };
+  const rmAttach = async (url) => { await api.delete(`/sales/${id}/attachments`, { params: { url } }); load(); };
 
   const copyReceipt = () => {
     const lines = [`*RIO SUL FESTAS & GRÁFICA*`, `Pedido #${sale.order_number}`, `Cliente: ${sale.customer_name || "-"}`,
@@ -90,10 +101,14 @@ export function VendaDetail() {
   const STATUSES = ["PEDIDO RECEBIDO","AGUARDANDO ARTE","ARTE EM CRIAÇÃO","AGUARDANDO APROVAÇÃO","ARTE APROVADA","EM PRODUÇÃO","PRONTO","ENTREGUE"];
 
   return (
-    <div className="space-y-4 max-w-4xl">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 max-w-5xl" onPaste={onPaste}>
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold text-white">Pedido #{sale.order_number}</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => nav(`/vendas/${id}/editar`)} data-testid="edit-sale" className="bg-cyan-500 text-white px-3 py-2 rounded text-sm font-bold flex items-center gap-1"><Edit size={14} /> Editar</button>
+          <button onClick={duplicate} className="bg-yellow-500 text-zinc-950 px-3 py-2 rounded text-sm font-bold flex items-center gap-1"><Duplicate size={14} /> Duplicar</button>
+          <button onClick={() => openPdf("note")} className="bg-zinc-800 text-white px-3 py-2 rounded text-sm flex items-center gap-1"><FileText size={14} /> Nota PDF</button>
+          <button onClick={() => openPdf("production")} className="bg-zinc-800 text-white px-3 py-2 rounded text-sm flex items-center gap-1"><ClipboardList size={14} /> Ordem Produção</button>
           <button onClick={copyReceipt} className="bg-green-500/90 text-white px-3 py-2 rounded text-sm font-bold flex items-center gap-1"><Copy size={14} /> WhatsApp</button>
           {user?.role === "admin" && !sale.cancelled && <button onClick={cancelSale} className="bg-red-500/90 text-white px-3 py-2 rounded text-sm flex items-center gap-1"><X size={14} /> Cancelar</button>}
         </div>
@@ -110,8 +125,7 @@ export function VendaDetail() {
           <div className="pt-2">
             <label className="text-zinc-500 text-xs">Status</label>
             <select data-testid="sale-status" value={sale.status} onChange={(e) => changeStatus(e.target.value)} className="w-full mt-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 text-white text-sm">
-              {STATUSES.map(s => <option key={s}>{s}</option>)}
-              <option>CANCELADO</option>
+              {STATUSES.map(s => <option key={s}>{s}</option>)}<option>CANCELADO</option>
             </select>
           </div>
         </div>
@@ -131,6 +145,7 @@ export function VendaDetail() {
           )}
         </div>
       </div>
+
       <div className="card-riosul overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="text-xs text-zinc-500 uppercase"><tr><th className="text-left px-3 py-2">Produto</th><th>Qtd</th><th className="text-right">Unit</th><th className="text-right">Subtotal</th></tr></thead>
@@ -145,6 +160,30 @@ export function VendaDetail() {
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="card-riosul p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm font-semibold text-white flex items-center gap-2"><Paperclip size={14} /> Anexos / Referências</div>
+          <label className="cursor-pointer bg-cyan-500 text-white px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1">
+            <Upload size={12} /> Enviar
+            <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => e.target.files[0] && uploadAttachment(e.target.files[0])} />
+          </label>
+        </div>
+        <div className="text-[11px] text-zinc-500 mb-2">Dica: arraste, faça upload ou <b>cole imagens (Ctrl+V)</b> nesta tela.</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {(sale.attachments || []).map((u, i) => (
+            <div key={i} className="relative group">
+              {u.endsWith(".pdf") ? (
+                <a href={u} target="_blank" rel="noreferrer" className="block h-32 bg-zinc-900 border border-zinc-800 rounded flex items-center justify-center text-cyan-400 text-xs">PDF</a>
+              ) : (
+                <a href={u} target="_blank" rel="noreferrer"><img src={u} alt="anexo" className="w-full h-32 object-cover rounded border border-zinc-800" /></a>
+              )}
+              <button onClick={() => rmAttach(u)} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded opacity-0 group-hover:opacity-100"><Trash2 size={12} /></button>
+            </div>
+          ))}
+          {(!sale.attachments || sale.attachments.length === 0) && <div className="col-span-full text-center text-zinc-600 text-xs py-6">Nenhum anexo</div>}
+        </div>
       </div>
     </div>
   );

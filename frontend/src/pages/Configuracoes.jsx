@@ -30,7 +30,7 @@ function LookupList({ title, endpoint }) {
 }
 
 export default function Configuracoes() {
-  const [s, setS] = useState({ company_name: "", phone: "", whatsapp: "", instagram: "", address: "", receipt_footer: "" });
+  const [s, setS] = useState({ company_name: "", phone: "", whatsapp: "", cnpj: "", email: "", address: "", receipt_footer: "" });
   useEffect(() => { api.get("/settings").then(r => setS(r.data)); }, []);
   const save = async () => { await api.put("/settings", s); toast.success("Salvo"); };
   return (
@@ -38,7 +38,7 @@ export default function Configuracoes() {
       <h1 className="text-2xl font-bold text-white">Configurações</h1>
       <div className="card-riosul p-4 space-y-2 max-w-xl">
         <div className="text-sm font-semibold text-white mb-2">Dados da empresa</div>
-        {["company_name","phone","whatsapp","instagram","address","receipt_footer"].map((k) => (
+        {["company_name","cnpj","phone","whatsapp","email","address","receipt_footer"].map((k) => (
           <div key={k}><label className="text-xs text-zinc-500 uppercase">{k.replace("_"," ")}</label>
             <input value={s[k] || ""} onChange={(e) => setS({ ...s, [k]: e.target.value })} className="w-full bg-zinc-900 border border-zinc-800 rounded px-3 py-2 text-white text-sm" /></div>
         ))}
