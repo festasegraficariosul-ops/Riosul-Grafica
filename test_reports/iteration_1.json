@@ -1,0 +1,43 @@
+{
+  "summary": "Backend smoke test for Rio Sul Festas & Gráfica MVP: 28/29 checks passed. Auth (admin+vendedor), RBAC (403 for vendedor on admin ops), full sales flow with custom price preservation after product price change, CSV import with variation grouping, Labelary ZPL->PNG and ZPL->PDF, dashboard/cash closure/reports/settings all working.",
+  "tested_scope": ["backend", "auth", "integration"],
+  "passed": [
+    "Admin login returns access_token + role=admin",
+    "Vendedor login returns role=vendedor",
+    "GET /auth/me with Bearer token",
+    "Seed data: 10 categories, 5 channels, 7 payment_methods, 7 units",
+    "Categories CRUD (POST/PUT/DELETE=soft delete)",
+    "Product create fixed with variations (auto id on variations)",
+    "Product create per_m2 with m2_price/m2_min_price",
+    "Vendedor 403 on POST /products (RBAC)",
+    "Customer create + phone search",
+    "Sale create by vendedor: order_number auto, seller_name=vend name, balance=total-paid",
+    "Sales scope: vendedor sees only own; admin sees all",
+    "Product price update does NOT alter existing sale unit_price (price immutability)",
+    "PUT /sales/{id}/status + POST /sales/{id}/payment recalculates balance",
+    "DELETE /sales/{id}: vendedor 403, admin sets cancelled=true",
+    "GET /cash/closure returns by_method/total_sold/total_received/count",
+    "Vales admin-only POST (vendedor 403), list filter by user_id",
+    "POST /products/import/preview CSV parses rows/errors/count",
+    "POST /products/import/confirm creates products, groups variations under same product+category, creates missing category",
+    "POST /labels/zpl-preview returns png_base64 (Labelary)",
+    "POST /labels/zpl-to-pdf returns valid application/pdf (%PDF header)",
+    "GET /reports/sales for group_by=day|seller|channel|month",
+    "GET /reports/top-products (admin only)",
+    "GET/PUT /settings + admin-only PUT (vendedor 403)"
+  ],
+  "failed": [
+    {
+      "area": "GET /api/dashboard",
+      "issue": "Spec mentions single 'faturamento' key; actual response splits into 'faturamento_hoje' and 'faturamento_mes' (plus extras). All required info is present but key name differs from spec.",
+      "evidence": "Response keys: vendas_hoje, faturamento_hoje, faturamento_mes, pedidos_hoje, ticket_medio, valores_a_receber, pedidos_producao, pedidos_prontos, pedidos_atrasados, by_seller, by_channel, daily",
+      "priority": "LOW"
+    }
+  ],
+  "action_items": [
+    "Confirm frontend consumes 'faturamento_hoje'/'faturamento_mes' (not a single 'faturamento'). If frontend already uses the split keys, no change needed."
+  ],
+  "success_rate": {"backend": "97%", "frontend": "not tested (backend only)"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}

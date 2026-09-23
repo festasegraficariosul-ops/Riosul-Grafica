@@ -28,7 +28,7 @@ def hash_pw(p: str) -> str:
 
 def verify_pw(p: str, h: str) -> bool:
     try: return bcrypt.checkpw(p.encode(), h.encode())
-    except: return False
+    except Exception: return False
 
 def make_access(uid: str, email: str, role: str) -> str:
     return jwt.encode({"sub": uid, "email": email, "role": role, "type": "access",
