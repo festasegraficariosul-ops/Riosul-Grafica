@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Substituir login por email por login de usuário: Igor/02578491 como admin, preservar vendedor e adicionar função produção."
+user_problem_statement: "Alterar somente o layout visual da tela Pedidos/Produção (Kanban), preservando drag-and-drop, status, endpoints e demais páginas."
 backend:
   - task: "Admin existente atualizado e login"
     implemented: true
@@ -130,6 +130,21 @@ backend:
       - working: true
         agent: "testing"
         comment: "✅ LOGIN-BASED AUTHENTICATION MIGRATION VERIFIED - All 32 tests passed. (1) Backend starts without errors, startup migration function ensure_user_logins() successfully migrates existing users to login field. (2) POST /api/auth/login with {\"login\":\"Igor\",\"password\":\"02578491\"} returns 200 OK, role=admin, name=Administrador, access_token provided, login field present in response. (3) Case-insensitive login confirmed: {\"login\":\"igor\",\"password\":\"02578491\"} also returns 200 OK with role=admin. (4) Legacy email rejection verified: {\"login\":\"festasegraficariosul@gmail.com\",\"password\":\"02578491\"} correctly returns 401 Unauthorized - email no longer accepted as login identifier. (5) Vendor login confirmed: {\"login\":\"vendedor\",\"password\":\"Vendedor@2026\"} returns 200 OK with role=vendedor, login field=vendedor. (6) GET /api/auth/me validated for both admin and vendor with Bearer tokens - returns 200 OK with correct user data (login, role, user_id match). (7) POST /api/users accepts role=producao (200 OK, user created with role=producao) and rejects invalid role=superadmin (400 Bad Request). Test user was deactivated after creation. (8) No duplicate Igor login confirmed: exactly 1 user with login=igor exists, user_id matches logged-in admin. (9) Login field appears in GET /api/users: all 3 users have login field (sample: igor, vendedor, test_producao_23). Migration complete and working correctly."
+  - task: "Cadastro de funcionários e permissões de equipe"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Corrigido o erro de criação causado pelo índice email único com email vazio; novos usuários agora usam login sem email, e vendedor/produção recebem acesso a vendas, pedidos, vales, clientes e produtos. Validar CRUD e permissões no backend."
+      - working: true
+        agent: "testing"
+        comment: "✅ EMPLOYEE MANAGEMENT AND PERMISSIONS FIX VERIFIED - All 8 comprehensive backend tests passed (100% success rate). CRITICAL FIX CONFIRMED: (1) Backend starts without errors after partial index implementation. (2) Admin login Igor/02578491 works correctly with role=admin. (3) POST /api/users with login, password, name, role=vendedor WITHOUT email field creates user successfully (200 OK) - NO DuplicateKeyError on email_1 index, confirming the partial index fix is working. (4) POST /api/users with role=producao WITHOUT email also creates successfully - both test users were able to login after creation. (5) Vendedor permissions verified: CAN access GET/POST /api/customers, GET/POST /api/products, GET /api/sales, GET/POST /api/vales (own user only) - all returned 200 OK. (6) Producao permissions verified: CAN access GET/POST /api/customers, GET/POST /api/products, GET /api/sales, GET/POST /api/vales (own user only) - all returned 200 OK. (7) Vendedor/Producao restrictions verified: CANNOT access GET /api/users (403), POST /api/categories (403), GET /api/reports/sales (403), DELETE /api/vales (403) - all correctly blocked with 403 Forbidden. (8) Admin full access verified: CAN access GET /api/users, POST /api/categories, GET /api/reports/sales, GET /api/reports/top-products, DELETE /api/vales, and all customer/product/sales endpoints - all returned 200 OK. Test cleanup successful: both test users deactivated. The DuplicateKeyError issue is completely resolved - users can now be created without email field using only login, password, name, and role."
+
 frontend:
   - task: "Frontend original importado e compilado"
     implemented: true
@@ -156,14 +171,42 @@ frontend:
       - working: true
         agent: "testing"
         comment: "✅ LOGIN UI MIGRATION COMPLETE - All 8 comprehensive tests passed. (1) Login page has text field with label 'Login' and data-testid='login-username' (NOT email field, type='text'). (2) Login with 'Igor' (capital I) and password '02578491' works: POST /api/auth/login with body {\"login\":\"Igor\",\"password\":\"02578491\"} returns 200 OK. (3) Case-insensitive login confirmed: lowercase 'igor' also returns 200 OK. (4) User navigates to dashboard (/) and sees 'Administrador' displayed in sidebar with role 'admin'. (5) Logout functionality works correctly, redirects to /login. (6) Old email 'festasegraficariosul@gmail.com' is correctly rejected with 401 Unauthorized and error message 'Credenciais inválidas'. (7) /funcionarios page verified: form has input with placeholder 'Login' (data-testid='user-login'), table has 'Login' column header, role selector offers three options: 'Administrador', 'Vendedor', and 'Produção'. (8) Re-login with 'Igor' confirmed working. Console shows only minor chart warnings and expected 401s for pre-login /auth/me checks. All requirements from review request validated successfully."
+  - task: "Aba Funcionários e permissões de equipe"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/Funcionarios.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Aba mantida exclusiva para admin; formulário envia login, senha e cargo. Produtos e vales foram liberados para vendedor/produção, com vale limitado ao próprio usuário. Validar criação e navegação E2E."
+
+  - task: "Kanban visual da tela Pedidos"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/Pedidos.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Reorganizado somente o layout Kanban: colunas compactas com contagem, cards densos com miniatura quando disponível, prazo/urgência/vendedor, largura horizontal e rolagem vertical; drag-and-drop e links foram preservados."
+      - working: true
+        agent: "testing"
+        comment: "✅ KANBAN VISUAL UPDATE COMPLETE - All 14 comprehensive UI tests passed. (1) Login with Igor/02578491 works correctly. (2) Kanban view active by default with bg-cyan-500 highlight. (3) Horizontal scroll container present (overflow-x-auto) for 8 columns. (4) All 8 status columns verified with correct names: PEDIDO RECEBIDO, AGUARDANDO ARTE, ARTE EM CRIAÇÃO, AGUARDANDO APROVAÇÃO, ARTE APROVADA, EM PRODUÇÃO, PRONTO, ENTREGUE. (5) Each column has status name (h2) and count badge showing number of items. (6) Cards are compact and show: order number (#1), customer name (Sem cliente), product/service (Impressão Colorida visible in screenshot), deadline (Prazo · Sem prazo), and seller (Administrador). (7) Cards with attachments display thumbnail image correctly with ImageIcon indicator - verified with test card showing document image at /api/uploads/a66474c8-d448-4d92-9120-aa8b0e5f12aa.jpg. (8) Overdue/urgent highlighting code implemented correctly (border-red-500/70 for overdue, border-amber-400/70 for urgent) - not verified in test data as no overdue/urgent orders exist. (9) Each card is clickable Link to /vendas/:id verified (href=/vendas/9f4e5960-39af-4233-92dc-6697132af6bf). (10) Columns have vertical scroll (overflow-y-auto) within section. (11) Drag-and-drop attributes present (draggable='true', onDragStart, onDrop handlers) and code shows PUT /api/sales/${id}/status endpoint preserved - FUNCTIONALITY NOT TESTED per system limitations (drag-and-drop testing not supported). (12) Toggle to List view works - button activates, table displays with correct headers (Pedido, Cliente, Prazo, Status, Total), 1 row shown. (13) Switch back to Kanban works correctly. (14) No console errors, GET /api/sales returns 200 OK. Screenshot captured showing clean, compact Kanban layout with proper spacing and styling. All visual requirements met."
+
 metadata:
+
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 7
+  test_sequence: 10
   run_ui: true
 test_plan:
   current_focus:
-    - "Login UI migration testing complete"
+    - "Aba Funcionários - validar criação E2E se necessário"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -187,3 +230,10 @@ agent_communication:
   - agent: "testing"
     message: "✅ LOGIN UI MIGRATION TESTING COMPLETE - Comprehensive E2E testing performed with 8 test scenarios covering all review request requirements. ALL TESTS PASSED: (1) Login page has text field (NOT email) with label 'Login' and data-testid='login-username'. (2) Login with 'Igor'/02578491 works, POST /api/auth/login uses {\"login\":\"Igor\",\"password\":\"02578491\"} and returns 200 OK. (3) Case-insensitive login confirmed: 'igor' (lowercase) also works. (4) User navigates to dashboard and sees 'Administrador' displayed. (5) Old email 'festasegraficariosul@gmail.com' correctly rejected with 401 Unauthorized. (6) Logout and re-login with Igor works. (7) /funcionarios page verified: form has 'Login' placeholder, table has 'Login' column, role selector offers Administrador/Vendedor/Produção. Console shows only minor chart warnings and expected 401s. The login migration from email to username is fully functional in both backend and frontend. Ready for main agent to summarize and finish."
 
+
+  - agent: "main"
+    message: "Usuário reportou que a aba Funcionários não criava usuários. Logs confirmaram DuplicateKeyError no índice email_1 por email vazio; corrigido com índice parcial e criação por login. Permissões de vendedor/produção foram ampliadas conforme solicitado."
+  - agent: "testing"
+    message: "✅ EMPLOYEE MANAGEMENT FIX COMPLETE - Comprehensive backend testing performed with 8 test scenarios covering all requirements from the review request. ALL TESTS PASSED (8/8 - 100% success rate). The DuplicateKeyError issue on email_1 index is completely resolved. Users can now be created without email field using only login, password, name, and role. Both vendedor and producao roles work correctly with appropriate permissions: they can access customers, products, sales, and vales (own only), but are correctly blocked from admin-only endpoints like /users, /categories, and /reports. Admin retains full access to all endpoints. Test users were successfully created, tested, and deactivated. The fix is production-ready."
+  - agent: "testing"
+    message: "✅ KANBAN VISUAL UPDATE TESTING COMPLETE - Performed comprehensive E2E testing of the Pedidos/Produção Kanban screen with 14 test scenarios. ALL VISUAL REQUIREMENTS VERIFIED: (1) Kanban occupies available width with horizontal scroll for 8 columns. (2) Each column displays status name and count badge. (3) Cards are compact showing order number, customer, product/service, deadline, and seller. (4) Cards with attachments/image_url display thumbnail correctly. (5) Overdue/urgent highlighting code implemented (visual verification not possible due to no test data with overdue/urgent flags). (6) Each card is clickable and links to /vendas/:id. (7) Columns have vertical scroll. (8) Drag-and-drop attributes and PUT /api/sales/{id}/status endpoint preserved in code - FUNCTIONALITY NOT TESTED per system limitations (drag-and-drop testing not supported by testing environment). (9) Toggle to List view works correctly. No console errors, all API calls successful. Screenshot captured. The visual update is complete and working as specified. IMPORTANT: Drag-and-drop functionality could not be tested due to system limitations but implementation is present in code."

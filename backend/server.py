@@ -77,6 +77,11 @@ async def require_admin(user=Depends(get_user)):
     if user.get("role") != "admin": raise HTTPException(403, "Apenas administradores")
     return user
 
+async def require_staff(user=Depends(get_user)):
+    if user.get("role") not in {"admin", "vendedor", "producao"}:
+        raise HTTPException(403, "Função sem permissão")
+    return user
+
 # ---------- Real catalog seed ----------
 REAL_CATEGORIES = [
     ("Impressões", "https://images.unsplash.com/photo-1586952518485-11b180e92764?w=400"),
@@ -267,7 +272,10 @@ async def ensure_user_logins():
 @app.on_event("startup")
 async def startup():
     await ensure_user_logins()
-    await db.users.create_index("email", unique=True)
+    await db.users.update_many({"email": ""}, {"$unset": {"email": ""}})
+    try: await db.users.drop_index("email_1")
+    except Exception: pass
+    await db.users.create_index("email", unique=True, partialFilterExpression={"email": {"$type": "string"}})
     await db.users.create_index("login", unique=True)
     await db.customers.create_index("phone")
     await db.sales.create_index("order_number")
@@ -376,9 +384,9 @@ async def create_user(body: UserIn, user=Depends(require_admin)):
     if not login: raise HTTPException(400, "Login é obrigatório")
     if body.role not in {"admin", "vendedor", "producao"}: raise HTTPException(400, "Função inválida")
     if await db.users.find_one({"login": login}): raise HTTPException(400, "Login já cadastrado")
-    d = {"id": new_id(), "login": login, "email": str(body.email).lower() if body.email else "",
-         "password_hash": hash_pw(body.password), "name": body.name, "role": body.role,
-         "active": body.active, "created_at": now_iso()}
+    d = {"id": new_id(), "login": login, "password_hash": hash_pw(body.password), "name": body.name,
+         "role": body.role, "active": body.active, "created_at": now_iso()}
+    if body.email: d["email"] = str(body.email).lower()
     await db.users.insert_one(d); d.pop("password_hash"); d.pop("_id", None); return d
 
 class UserUpd(BaseModel):
@@ -460,7 +468,7 @@ async def prods(user=Depends(get_user)):
     return await db.products.find({}, {"_id": 0}).sort([("favorite", -1), ("order", 1)]).to_list(2000)
 
 @api.post("/products")
-async def prod_create(body: ProductIn, user=Depends(require_admin)):
+async def prod_create(body: ProductIn, user=Depends(require_staff)):
     d = body.model_dump(); d["id"] = new_id()
     for v in d.get("variations", []):
         if not v.get("id"): v["id"] = new_id()
@@ -468,7 +476,7 @@ async def prod_create(body: ProductIn, user=Depends(require_admin)):
     await db.products.insert_one(d); d.pop("_id", None); return d
 
 @api.put("/products/{pid}")
-async def prod_upd(pid: str, body: ProductIn, user=Depends(require_admin)):
+async def prod_upd(pid: str, body: ProductIn, user=Depends(require_staff)):
     d = body.model_dump()
     for v in d.get("variations", []):
         if not v.get("id"): v["id"] = new_id()
@@ -480,7 +488,7 @@ async def prod_del(pid: str, user=Depends(require_admin)):
     await db.products.update_one({"id": pid}, {"$set": {"active": False}}); return {"ok": True}
 
 @api.put("/products/{pid}/favorite")
-async def prod_fav(pid: str, payload: Dict[str, Any], user=Depends(require_admin)):
+async def prod_fav(pid: str, payload: Dict[str, Any], user=Depends(require_staff)):
     await db.products.update_one({"id": pid}, {"$set": {"favorite": bool(payload.get("favorite"))}})
     return {"ok": True}
 
@@ -894,12 +902,14 @@ class ValeIn(BaseModel):
 @api.get("/vales")
 async def vales_list(user_id: Optional[str] = None, user=Depends(get_user)):
     q = {}
-    if user["role"] == "vendedor": q["user_id"] = user["id"]
+    if user["role"] in {"vendedor", "producao"}: q["user_id"] = user["id"]
     elif user_id: q["user_id"] = user_id
     return await db.vales.find(q, {"_id": 0}).sort("date", -1).to_list(1000)
 
 @api.post("/vales")
-async def vales_create(body: ValeIn, user=Depends(require_admin)):
+async def vales_create(body: ValeIn, user=Depends(require_staff)):
+    if user["role"] != "admin" and body.user_id != user["id"]:
+        raise HTTPException(403, "Você só pode registrar vale para seu próprio usuário")
     d = body.model_dump()
     if not d.get("date"): d["date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     d["id"] = new_id(); d["created_at"] = now_iso()

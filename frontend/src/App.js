@@ -44,10 +44,10 @@ export default function App() {
             <Route path="/caixa" element={<Caixa />} />
             <Route path="/tabelas" element={<TabelasPrecos />} />
             <Route path="/shopee" element={<CentralShopee />} />
-            <Route path="/produtos" element={<Protected adminOnly><Produtos /></Protected>} />
+            <Route path="/produtos" element={<Protected><Produtos /></Protected>} />
             <Route path="/categorias" element={<Protected adminOnly><Categorias /></Protected>} />
             <Route path="/funcionarios" element={<Protected adminOnly><Funcionarios /></Protected>} />
-            <Route path="/vales" element={<Protected adminOnly><Vales /></Protected>} />
+            <Route path="/vales" element={<Protected><Vales /></Protected>} />
             <Route path="/relatorios" element={<Protected adminOnly><Relatorios /></Protected>} />
             <Route path="/configuracoes" element={<Protected adminOnly><Configuracoes /></Protected>} />
           </Route>

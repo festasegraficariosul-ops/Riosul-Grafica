@@ -2,7 +2,9 @@ import React, { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { brl } from "@/lib/format";
 import { Plus, Trash2, Edit, Upload, X, Star, Image as ImageIcon } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
+
 
 const PRICE_TYPES = [{v:"fixed",l:"Preço fixo"},{v:"variable",l:"Preço informado na venda"},{v:"per_m2",l:"Por m²"}];
 
@@ -11,7 +13,10 @@ export default function Produtos() {
   const [cats, setCats] = useState([]);
   const [units, setUnits] = useState([]);
   const [form, setForm] = useState(null);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [importOpen, setImportOpen] = useState(false);
+
 
   const load = () => api.get("/products").then((r) => setList(r.data));
   useEffect(() => { load(); api.get("/categories").then(r => setCats(r.data)); api.get("/units").then(r => setUnits(r.data)); }, []);
@@ -36,7 +41,7 @@ export default function Produtos() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Produtos</h1>
         <div className="flex gap-2">
-          <button onClick={() => setImportOpen(true)} data-testid="import-open" className="bg-zinc-800 text-white px-3 py-2 rounded text-sm flex items-center gap-1"><Upload size={14} /> Importar</button>
+          {isAdmin && <button onClick={() => setImportOpen(true)} data-testid="import-open" className="bg-zinc-800 text-white px-3 py-2 rounded text-sm flex items-center gap-1"><Upload size={14} /> Importar</button>}
           <button onClick={newProduct} data-testid="new-product" className="bg-gradient-to-r from-pink-500 to-cyan-500 text-white font-bold px-4 py-2 rounded text-sm flex items-center gap-1"><Plus size={14} /> Novo</button>
         </div>
       </div>
@@ -53,7 +58,7 @@ export default function Produtos() {
                 <td className="text-zinc-400 text-xs">{p.price_type}</td>
                 <td className="text-zinc-400 text-xs">{p.variations?.length || 0}</td>
                 <td><button onClick={() => toggleFav(p)}><Star size={16} className={p.favorite ? "text-yellow-400 fill-yellow-400" : "text-zinc-600"} /></button></td>
-                <td className="text-right pr-3"><button onClick={() => setForm(p)} className="text-cyan-400 mr-2"><Edit size={14} /></button><button onClick={() => del(p.id)} className="text-red-400"><Trash2 size={14} /></button></td>
+                <td className="text-right pr-3"><button onClick={() => setForm(p)} className="text-cyan-400 mr-2"><Edit size={14} /></button>{isAdmin && <button onClick={() => del(p.id)} className="text-red-400"><Trash2 size={14} /></button>}</td>
               </tr>
             ))}
           </tbody>

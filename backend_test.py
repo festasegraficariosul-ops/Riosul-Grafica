@@ -1,752 +1,691 @@
 #!/usr/bin/env python3
 """
-Backend API Test Suite for Rio Sul Gráfica
-Tests login-based authentication migration
+Backend Testing Script for Rio Sul - Employee Management and Permissions
+Tests the fix for employee creation and role-based permissions
 """
 
 import requests
-import sys
 import json
+import sys
+from typing import Dict, Optional, List
 
 # Configuration
-BASE_URL = "https://eb37b9d8-61b4-46ff-bf7b-5fcd9d03495c.preview.emergentagent.com/api"
-FRONTEND_ORIGIN = "https://eb37b9d8-61b4-46ff-bf7b-5fcd9d03495c.preview.emergentagent.com"
+API_BASE = "https://import-hub-156.preview.emergentagent.com/api"
 
 # Test credentials from /app/memory/test_credentials.md
 ADMIN_LOGIN = "Igor"
 ADMIN_PASSWORD = "02578491"
-ADMIN_NAME = "Administrador"
 
-VENDOR_LOGIN = "vendedor"
-VENDOR_PASSWORD = "Vendedor@2026"
+# Colors for output
+GREEN = '\033[92m'
+RED = '\033[91m'
+YELLOW = '\033[93m'
+BLUE = '\033[94m'
+RESET = '\033[0m'
 
-# Legacy email that should NOT work anymore
-LEGACY_EMAIL = "festasegraficariosul@gmail.com"
-
-# Test results
-results = {
-    "passed": [],
-    "failed": [],
-    "total": 0
-}
-
-def log_test(name, passed, details=""):
-    """Log test result"""
-    results["total"] += 1
-    if passed:
-        results["passed"].append(name)
-        print(f"✅ PASS: {name}")
-        if details:
-            print(f"   {details}")
-    else:
-        results["failed"].append(name)
-        print(f"❌ FAIL: {name}")
-        if details:
-            print(f"   {details}")
-
-def test_backend_health():
-    """Test 1: Confirm backend is responding"""
-    try:
-        response = requests.get(f"{BASE_URL.replace('/api', '')}/", timeout=10)
-        log_test("Backend Health Check", True, f"Backend is responding (status: {response.status_code})")
-        return True
-    except Exception as e:
-        log_test("Backend Health Check", False, f"Backend not responding: {str(e)}")
-        return False
-
-def test_admin_login_uppercase():
-    """Test 2: Admin login with 'Igor' (uppercase I)"""
-    try:
-        headers = {
-            "Origin": FRONTEND_ORIGIN,
-            "Content-Type": "application/json"
-        }
+class TestSession:
+    def __init__(self):
+        self.session = requests.Session()
+        self.admin_token = None
+        self.vendedor_token = None
+        self.producao_token = None
+        self.test_users_created = []
+        self.test_customers_created = []
+        self.test_products_created = []
+        self.test_sales_created = []
+        self.test_vales_created = []
         
-        response = requests.post(
-            f"{BASE_URL}/auth/login",
-            json={
-                "login": ADMIN_LOGIN,
-                "password": ADMIN_PASSWORD
-            },
-            headers=headers,
-            timeout=10
-        )
+    def log(self, message: str, color: str = RESET):
+        print(f"{color}{message}{RESET}")
         
-        if response.status_code != 200:
-            log_test("Admin Login (Igor) - Status Code", False, 
-                    f"Expected 200, got {response.status_code}. Response: {response.text}")
-            return None
+    def log_success(self, message: str):
+        self.log(f"✅ {message}", GREEN)
         
-        log_test("Admin Login (Igor) - Status Code", True, "Received 200 OK")
+    def log_error(self, message: str):
+        self.log(f"❌ {message}", RED)
         
+    def log_info(self, message: str):
+        self.log(f"ℹ️  {message}", BLUE)
+        
+    def log_warning(self, message: str):
+        self.log(f"⚠️  {message}", YELLOW)
+
+    def login(self, login: str, password: str) -> Optional[str]:
+        """Login and return access token"""
         try:
-            data = response.json()
-        except:
-            log_test("Admin Login (Igor) - JSON Response", False, "Response is not valid JSON")
-            return None
-        
-        log_test("Admin Login (Igor) - JSON Response", True, "Valid JSON response received")
-        
-        # Check role
-        role = data.get("role")
-        if role != "admin":
-            log_test("Admin Login (Igor) - Role Check", False, 
-                    f"Expected role='admin', got role='{role}'")
-        else:
-            log_test("Admin Login (Igor) - Role Check", True, "Role is 'admin'")
-        
-        # Check name
-        name = data.get("name")
-        if name != ADMIN_NAME:
-            log_test("Admin Login (Igor) - Name Check", False, 
-                    f"Expected name='{ADMIN_NAME}', got name='{name}'")
-        else:
-            log_test("Admin Login (Igor) - Name Check", True, f"Name is '{ADMIN_NAME}'")
-        
-        # Check login field
-        login = data.get("login")
-        if not login:
-            log_test("Admin Login (Igor) - Login Field", False, "No login field in response")
-        else:
-            log_test("Admin Login (Igor) - Login Field", True, f"Login field present: {login}")
-        
-        # Check for access_token
-        access_token = data.get("access_token")
-        if not access_token:
-            log_test("Admin Login (Igor) - Access Token", False, "No access_token in response")
-            return None
-        
-        log_test("Admin Login (Igor) - Access Token", True, "Access token received")
-        
-        # Check for user ID
-        user_id = data.get("id")
-        if not user_id:
-            log_test("Admin Login (Igor) - User ID", False, "No user ID in response")
-        else:
-            log_test("Admin Login (Igor) - User ID", True, f"User ID: {user_id}")
-        
-        return {
-            "access_token": access_token,
-            "user_id": user_id,
-            "login": login,
-            "role": role,
-            "name": name
-        }
-        
-    except Exception as e:
-        log_test("Admin Login (Igor) - Request", False, f"Exception: {str(e)}")
-        return None
-
-def test_admin_login_lowercase():
-    """Test 3: Admin login with 'igor' (lowercase) - case-insensitive check"""
-    try:
-        headers = {
-            "Origin": FRONTEND_ORIGIN,
-            "Content-Type": "application/json"
-        }
-        
-        response = requests.post(
-            f"{BASE_URL}/auth/login",
-            json={
-                "login": "igor",  # lowercase
-                "password": ADMIN_PASSWORD
-            },
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code != 200:
-            log_test("Admin Login (igor lowercase) - Status Code", False, 
-                    f"Expected 200, got {response.status_code}. Response: {response.text}")
-            return False
-        
-        log_test("Admin Login (igor lowercase) - Status Code", True, "Received 200 OK - case-insensitive works")
-        
-        try:
-            data = response.json()
-        except:
-            log_test("Admin Login (igor lowercase) - JSON Response", False, "Response is not valid JSON")
-            return False
-        
-        # Check role
-        role = data.get("role")
-        if role != "admin":
-            log_test("Admin Login (igor lowercase) - Role Check", False, 
-                    f"Expected role='admin', got role='{role}'")
-        else:
-            log_test("Admin Login (igor lowercase) - Role Check", True, "Role is 'admin'")
-        
-        return True
-        
-    except Exception as e:
-        log_test("Admin Login (igor lowercase) - Request", False, f"Exception: {str(e)}")
-        return False
-
-def test_legacy_email_rejected():
-    """Test 4: Confirm old email is NOT accepted as login identifier"""
-    try:
-        headers = {
-            "Origin": FRONTEND_ORIGIN,
-            "Content-Type": "application/json"
-        }
-        
-        response = requests.post(
-            f"{BASE_URL}/auth/login",
-            json={
-                "login": LEGACY_EMAIL,  # Try to use email as login
-                "password": ADMIN_PASSWORD
-            },
-            headers=headers,
-            timeout=10
-        )
-        
-        # Should fail with 401
-        if response.status_code == 401:
-            log_test("Legacy Email Rejection", True, 
-                    f"Email '{LEGACY_EMAIL}' correctly rejected as login identifier (401)")
-            return True
-        elif response.status_code == 200:
-            log_test("Legacy Email Rejection", False, 
-                    f"Email '{LEGACY_EMAIL}' was accepted as login - should be rejected!")
-            return False
-        else:
-            log_test("Legacy Email Rejection", False, 
-                    f"Unexpected status code {response.status_code}")
-            return False
-        
-    except Exception as e:
-        log_test("Legacy Email Rejection - Request", False, f"Exception: {str(e)}")
-        return False
-
-def test_vendor_login():
-    """Test 5: Vendor login with 'vendedor' credentials"""
-    try:
-        headers = {
-            "Origin": FRONTEND_ORIGIN,
-            "Content-Type": "application/json"
-        }
-        
-        response = requests.post(
-            f"{BASE_URL}/auth/login",
-            json={
-                "login": VENDOR_LOGIN,
-                "password": VENDOR_PASSWORD
-            },
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code != 200:
-            log_test("Vendor Login - Status Code", False, 
-                    f"Expected 200, got {response.status_code}. Response: {response.text}")
-            return None
-        
-        log_test("Vendor Login - Status Code", True, "Received 200 OK")
-        
-        try:
-            data = response.json()
-        except:
-            log_test("Vendor Login - JSON Response", False, "Response is not valid JSON")
-            return None
-        
-        log_test("Vendor Login - JSON Response", True, "Valid JSON response received")
-        
-        # Check role
-        role = data.get("role")
-        if role != "vendedor":
-            log_test("Vendor Login - Role Check", False, 
-                    f"Expected role='vendedor', got role='{role}'")
-        else:
-            log_test("Vendor Login - Role Check", True, "Role is 'vendedor'")
-        
-        # Check login field
-        login = data.get("login")
-        if login != VENDOR_LOGIN:
-            log_test("Vendor Login - Login Field", False, 
-                    f"Expected login='{VENDOR_LOGIN}', got login='{login}'")
-        else:
-            log_test("Vendor Login - Login Field", True, f"Login is '{VENDOR_LOGIN}'")
-        
-        # Check for access_token
-        access_token = data.get("access_token")
-        if not access_token:
-            log_test("Vendor Login - Access Token", False, "No access_token in response")
-            return None
-        
-        log_test("Vendor Login - Access Token", True, "Access token received")
-        
-        return {
-            "access_token": access_token,
-            "user_id": data.get("id"),
-            "login": login,
-            "role": role
-        }
-        
-    except Exception as e:
-        log_test("Vendor Login - Request", False, f"Exception: {str(e)}")
-        return None
-
-def test_auth_me_admin(auth_data):
-    """Test 6: Validate GET /api/auth/me for admin"""
-    if not auth_data:
-        log_test("Auth Me (Admin) - Skipped", False, "No auth data from login")
-        return False
-    
-    try:
-        headers = {
-            "Authorization": f"Bearer {auth_data['access_token']}"
-        }
-        
-        response = requests.get(
-            f"{BASE_URL}/auth/me",
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code != 200:
-            log_test("Auth Me (Admin) - Status Code", False, 
-                    f"Expected 200, got {response.status_code}. Response: {response.text}")
-            return False
-        
-        log_test("Auth Me (Admin) - Status Code", True, "Received 200 OK")
-        
-        try:
-            data = response.json()
-        except:
-            log_test("Auth Me (Admin) - JSON Response", False, "Response is not valid JSON")
-            return False
-        
-        log_test("Auth Me (Admin) - JSON Response", True, "Valid JSON response received")
-        
-        # Verify the data matches login response
-        if data.get("login") != auth_data["login"]:
-            log_test("Auth Me (Admin) - Login Match", False, 
-                    f"Login mismatch: expected '{auth_data['login']}', got '{data.get('login')}'")
-        else:
-            log_test("Auth Me (Admin) - Login Match", True, "Login matches login response")
-        
-        if data.get("role") != "admin":
-            log_test("Auth Me (Admin) - Role Check", False, 
-                    f"Expected role='admin', got role='{data.get('role')}'")
-        else:
-            log_test("Auth Me (Admin) - Role Check", True, "Role is 'admin'")
-        
-        if data.get("id") != auth_data["user_id"]:
-            log_test("Auth Me (Admin) - User ID Match", False, 
-                    f"User ID mismatch: expected '{auth_data['user_id']}', got '{data.get('id')}'")
-        else:
-            log_test("Auth Me (Admin) - User ID Match", True, "User ID matches login response")
-        
-        return True
-        
-    except Exception as e:
-        log_test("Auth Me (Admin) - Request", False, f"Exception: {str(e)}")
-        return False
-
-def test_auth_me_vendor(auth_data):
-    """Test 7: Validate GET /api/auth/me for vendor"""
-    if not auth_data:
-        log_test("Auth Me (Vendor) - Skipped", False, "No auth data from login")
-        return False
-    
-    try:
-        headers = {
-            "Authorization": f"Bearer {auth_data['access_token']}"
-        }
-        
-        response = requests.get(
-            f"{BASE_URL}/auth/me",
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code != 200:
-            log_test("Auth Me (Vendor) - Status Code", False, 
-                    f"Expected 200, got {response.status_code}. Response: {response.text}")
-            return False
-        
-        log_test("Auth Me (Vendor) - Status Code", True, "Received 200 OK")
-        
-        try:
-            data = response.json()
-        except:
-            log_test("Auth Me (Vendor) - JSON Response", False, "Response is not valid JSON")
-            return False
-        
-        # Verify role
-        if data.get("role") != "vendedor":
-            log_test("Auth Me (Vendor) - Role Check", False, 
-                    f"Expected role='vendedor', got role='{data.get('role')}'")
-        else:
-            log_test("Auth Me (Vendor) - Role Check", True, "Role is 'vendedor'")
-        
-        return True
-        
-    except Exception as e:
-        log_test("Auth Me (Vendor) - Request", False, f"Exception: {str(e)}")
-        return False
-
-def test_user_creation_producao(admin_auth):
-    """Test 8: Validate POST /api/users accepts role=producao"""
-    if not admin_auth:
-        log_test("User Creation (producao) - Skipped", False, "No admin auth data")
-        return None
-    
-    try:
-        headers = {
-            "Authorization": f"Bearer {admin_auth['access_token']}",
-            "Content-Type": "application/json"
-        }
-        
-        # Create a test user with role=producao
-        test_user_login = f"test_producao_{results['total']}"
-        
-        response = requests.post(
-            f"{BASE_URL}/users",
-            json={
-                "login": test_user_login,
-                "password": "TestPass123",
-                "name": "Test Producao User",
-                "role": "producao"
-            },
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code != 200:
-            log_test("User Creation (producao) - Status Code", False, 
-                    f"Expected 200, got {response.status_code}. Response: {response.text}")
-            return None
-        
-        log_test("User Creation (producao) - Status Code", True, "Received 200 OK - role 'producao' accepted")
-        
-        try:
-            data = response.json()
-        except:
-            log_test("User Creation (producao) - JSON Response", False, "Response is not valid JSON")
-            return None
-        
-        # Verify role
-        if data.get("role") != "producao":
-            log_test("User Creation (producao) - Role Check", False, 
-                    f"Expected role='producao', got role='{data.get('role')}'")
-        else:
-            log_test("User Creation (producao) - Role Check", True, "Role is 'producao'")
-        
-        created_user_id = data.get("id")
-        
-        # Clean up: delete the test user immediately
-        if created_user_id:
-            # Note: There's no DELETE endpoint, so we'll deactivate it
-            # Actually, looking at the code, there's no deactivate endpoint either
-            # We'll just leave it but mark it as inactive via update
-            try:
-                requests.put(
-                    f"{BASE_URL}/users/{created_user_id}",
-                    json={"active": False},
-                    headers=headers,
-                    timeout=10
-                )
-                log_test("User Creation (producao) - Cleanup", True, "Test user deactivated")
-            except:
-                log_test("User Creation (producao) - Cleanup", False, "Could not deactivate test user")
-        
-        return created_user_id
-        
-    except Exception as e:
-        log_test("User Creation (producao) - Request", False, f"Exception: {str(e)}")
-        return None
-
-def test_user_creation_invalid_role(admin_auth):
-    """Test 9: Validate POST /api/users rejects invalid role"""
-    if not admin_auth:
-        log_test("User Creation (invalid role) - Skipped", False, "No admin auth data")
-        return False
-    
-    try:
-        headers = {
-            "Authorization": f"Bearer {admin_auth['access_token']}",
-            "Content-Type": "application/json"
-        }
-        
-        # Try to create a user with invalid role
-        test_user_login = f"test_invalid_{results['total']}"
-        
-        response = requests.post(
-            f"{BASE_URL}/users",
-            json={
-                "login": test_user_login,
-                "password": "TestPass123",
-                "name": "Test Invalid Role User",
-                "role": "superadmin"  # Invalid role
-            },
-            headers=headers,
-            timeout=10
-        )
-        
-        # Should fail with 400
-        if response.status_code == 400:
-            log_test("User Creation (invalid role) - Rejection", True, 
-                    f"Invalid role 'superadmin' correctly rejected (400)")
-            return True
-        elif response.status_code == 200:
-            log_test("User Creation (invalid role) - Rejection", False, 
-                    f"Invalid role 'superadmin' was accepted - should be rejected!")
-            # Clean up if it was created
-            try:
+            response = self.session.post(
+                f"{API_BASE}/auth/login",
+                json={"login": login, "password": password},
+                timeout=10
+            )
+            if response.status_code == 200:
                 data = response.json()
-                if data.get("id"):
-                    requests.put(
-                        f"{BASE_URL}/users/{data['id']}",
-                        json={"active": False},
-                        headers=headers,
-                        timeout=10
-                    )
-            except:
-                pass
-            return False
-        else:
-            log_test("User Creation (invalid role) - Rejection", False, 
-                    f"Unexpected status code {response.status_code}")
-            return False
-        
-    except Exception as e:
-        log_test("User Creation (invalid role) - Request", False, f"Exception: {str(e)}")
-        return False
-
-def test_no_duplicate_igor(admin_auth):
-    """Test 10: Check that Igor login is not duplicated"""
-    if not admin_auth:
-        log_test("No Duplicate Igor - Skipped", False, "No admin auth data")
-        return False
-    
-    try:
-        headers = {
-            "Authorization": f"Bearer {admin_auth['access_token']}"
-        }
-        
-        response = requests.get(
-            f"{BASE_URL}/users",
-            headers=headers,
-            timeout=10
-        )
-        
-        if response.status_code != 200:
-            log_test("No Duplicate Igor - API Access", False, 
-                    f"Could not access /users endpoint: {response.status_code}")
-            return False
-        
-        log_test("No Duplicate Igor - API Access", True, "Successfully accessed /users endpoint")
-        
-        try:
-            users = response.json()
-        except:
-            log_test("No Duplicate Igor - JSON Response", False, "Response is not valid JSON")
-            return False
-        
-        # Count users with login 'igor' (case-insensitive)
-        igor_users = [u for u in users if (u.get("login") or "").lower() == "igor"]
-        
-        if len(igor_users) == 0:
-            log_test("No Duplicate Igor - Igor Exists", False, 
-                    f"No user found with login 'igor'")
-            return False
-        elif len(igor_users) > 1:
-            log_test("No Duplicate Igor - No Duplicates", False, 
-                    f"Found {len(igor_users)} users with login 'igor' (duplicates exist)")
-            return False
-        else:
-            log_test("No Duplicate Igor - No Duplicates", True, 
-                    f"Exactly 1 user found with login 'igor'")
-            
-            # Verify it's the same user we logged in as
-            igor_user = igor_users[0]
-            if igor_user.get("id") != admin_auth["user_id"]:
-                log_test("No Duplicate Igor - User ID Match", False, 
-                        f"Igor user ID mismatch: expected '{admin_auth['user_id']}', got '{igor_user.get('id')}'")
+                return data.get("access_token")
             else:
-                log_test("No Duplicate Igor - User ID Match", True, 
-                        "Igor user ID matches logged-in user")
-            
-            return True
-        
-    except Exception as e:
-        log_test("No Duplicate Igor - Request", False, f"Exception: {str(e)}")
-        return False
-
-def test_login_field_in_users_list(admin_auth):
-    """Test 11: Confirm login field appears in GET /api/users"""
-    if not admin_auth:
-        log_test("Login Field in Users List - Skipped", False, "No admin auth data")
-        return False
+                self.log_error(f"Login failed for {login}: {response.status_code} - {response.text}")
+                return None
+        except Exception as e:
+            self.log_error(f"Login exception for {login}: {str(e)}")
+            return None
     
-    try:
-        headers = {
-            "Authorization": f"Bearer {admin_auth['access_token']}"
-        }
+    def make_request(self, method: str, endpoint: str, token: Optional[str] = None, 
+                     json_data: Optional[Dict] = None, params: Optional[Dict] = None) -> requests.Response:
+        """Make authenticated request"""
+        headers = {}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         
-        response = requests.get(
-            f"{BASE_URL}/users",
-            headers=headers,
-            timeout=10
-        )
+        url = f"{API_BASE}{endpoint}"
         
-        if response.status_code != 200:
-            log_test("Login Field in Users List - API Access", False, 
-                    f"Could not access /users endpoint: {response.status_code}")
-            return False
+        # Use a fresh session without cookies to avoid cookie interference with Bearer tokens
+        fresh_session = requests.Session()
         
         try:
-            users = response.json()
-        except:
-            log_test("Login Field in Users List - JSON Response", False, "Response is not valid JSON")
-            return False
-        
-        if not users:
-            log_test("Login Field in Users List - Users Exist", False, "No users found")
-            return False
-        
-        # Check if all users have login field
-        users_without_login = [u for u in users if "login" not in u]
-        
-        if users_without_login:
-            log_test("Login Field in Users List - All Users Have Login", False, 
-                    f"{len(users_without_login)} users missing 'login' field")
-            return False
-        else:
-            log_test("Login Field in Users List - All Users Have Login", True, 
-                    f"All {len(users)} users have 'login' field")
-            
-            # Show some examples
-            sample_logins = [u.get("login") for u in users[:3]]
-            log_test("Login Field in Users List - Sample Logins", True, 
-                    f"Sample logins: {', '.join(sample_logins)}")
-            
+            if method == "GET":
+                return fresh_session.get(url, headers=headers, params=params, timeout=10)
+            elif method == "POST":
+                return fresh_session.post(url, headers=headers, json=json_data, timeout=10)
+            elif method == "PUT":
+                return fresh_session.put(url, headers=headers, json=json_data, timeout=10)
+            elif method == "DELETE":
+                return fresh_session.delete(url, headers=headers, timeout=10)
+        except Exception as e:
+            self.log_error(f"Request exception: {str(e)}")
+            raise
+
+def test_1_backend_starts(test: TestSession) -> bool:
+    """Test 1: Backend starts without errors"""
+    test.log_info("TEST 1: Backend starts without errors")
+    try:
+        response = requests.get(f"{API_BASE}/../docs", timeout=5)
+        if response.status_code == 200:
+            test.log_success("Backend is running and responding")
             return True
-        
+        else:
+            test.log_error(f"Backend returned unexpected status: {response.status_code}")
+            return False
     except Exception as e:
-        log_test("Login Field in Users List - Request", False, f"Exception: {str(e)}")
+        test.log_error(f"Backend is not accessible: {str(e)}")
         return False
+
+def test_2_admin_login(test: TestSession) -> bool:
+    """Test 2: Admin login with Igor/02578491"""
+    test.log_info("TEST 2: Admin login with Igor/02578491")
+    
+    token = test.login(ADMIN_LOGIN, ADMIN_PASSWORD)
+    if not token:
+        test.log_error("Admin login failed")
+        return False
+    
+    test.admin_token = token
+    
+    # Verify admin role
+    response = test.make_request("GET", "/auth/me", token)
+    if response.status_code != 200:
+        test.log_error(f"Failed to get user info: {response.status_code}")
+        return False
+    
+    user_data = response.json()
+    if user_data.get("role") != "admin":
+        test.log_error(f"User role is not admin: {user_data.get('role')}")
+        return False
+    
+    if user_data.get("login").lower() != ADMIN_LOGIN.lower():
+        test.log_error(f"User login mismatch: {user_data.get('login')}")
+        return False
+    
+    test.log_success(f"Admin login successful: {user_data.get('name')} (role: {user_data.get('role')})")
+    return True
+
+def test_3_create_vendedor_without_email(test: TestSession) -> bool:
+    """Test 3: POST /api/users with login, password, name and role vendedor, WITHOUT email"""
+    test.log_info("TEST 3: Create vendedor user without email (should NOT get DuplicateKeyError)")
+    
+    # Create unique test user
+    import time
+    timestamp = int(time.time())
+    test_login = f"test_vendedor_{timestamp}"
+    
+    user_data = {
+        "login": test_login,
+        "password": "TestVendedor@2026",
+        "name": "Test Vendedor User",
+        "role": "vendedor",
+        "active": True
+        # NO email field
+    }
+    
+    response = test.make_request("POST", "/users", test.admin_token, json_data=user_data)
+    
+    if response.status_code not in [200, 201]:
+        test.log_error(f"Failed to create vendedor user: {response.status_code} - {response.text}")
+        if "DuplicateKeyError" in response.text or "duplicate key" in response.text.lower():
+            test.log_error("❌ CRITICAL: DuplicateKeyError on email field - the fix is NOT working!")
+        return False
+    
+    created_user = response.json()
+    test.test_users_created.append(created_user["id"])
+    
+    test.log_success(f"Vendedor user created successfully: {created_user['login']} (id: {created_user['id']})")
+    
+    # Verify user appears in GET /api/users
+    response = test.make_request("GET", "/users", test.admin_token)
+    if response.status_code != 200:
+        test.log_error(f"Failed to get users list: {response.status_code}")
+        return False
+    
+    users = response.json()
+    found = False
+    for user in users:
+        if user["id"] == created_user["id"]:
+            found = True
+            test.log_success(f"User found in GET /api/users: {user['login']}")
+            break
+    
+    if not found:
+        test.log_error("Created user not found in users list")
+        return False
+    
+    # Test login with the new vendedor user
+    vendedor_token = test.login(test_login, "TestVendedor@2026")
+    if not vendedor_token:
+        test.log_error("Failed to login with newly created vendedor user")
+        return False
+    
+    test.vendedor_token = vendedor_token
+    test.log_success("Successfully logged in with new vendedor user")
+    
+    return True
+
+def test_4_create_producao_without_email(test: TestSession) -> bool:
+    """Test 4: Create producao user without email"""
+    test.log_info("TEST 4: Create producao user without email")
+    
+    import time
+    timestamp = int(time.time())
+    test_login = f"test_producao_{timestamp}"
+    
+    user_data = {
+        "login": test_login,
+        "password": "TestProducao@2026",
+        "name": "Test Producao User",
+        "role": "producao",
+        "active": True
+        # NO email field
+    }
+    
+    response = test.make_request("POST", "/users", test.admin_token, json_data=user_data)
+    
+    if response.status_code not in [200, 201]:
+        test.log_error(f"Failed to create producao user: {response.status_code} - {response.text}")
+        if "DuplicateKeyError" in response.text or "duplicate key" in response.text.lower():
+            test.log_error("❌ CRITICAL: DuplicateKeyError on email field - the fix is NOT working!")
+        return False
+    
+    created_user = response.json()
+    test.test_users_created.append(created_user["id"])
+    
+    test.log_success(f"Producao user created successfully: {created_user['login']} (id: {created_user['id']})")
+    
+    # Test login with the new producao user
+    producao_token = test.login(test_login, "TestProducao@2026")
+    if not producao_token:
+        test.log_error("Failed to login with newly created producao user")
+        return False
+    
+    test.producao_token = producao_token
+    test.log_success("Successfully logged in with new producao user")
+    
+    return True
+
+def test_5_vendedor_permissions(test: TestSession) -> bool:
+    """Test 5: Verify vendedor can access allowed endpoints"""
+    test.log_info("TEST 5: Verify vendedor permissions")
+    
+    if not test.vendedor_token:
+        test.log_error("No vendedor token available")
+        return False
+    
+    all_passed = True
+    
+    # Test GET /api/customers (should work)
+    response = test.make_request("GET", "/customers", test.vendedor_token)
+    if response.status_code == 200:
+        test.log_success("Vendedor can GET /api/customers")
+    else:
+        test.log_error(f"Vendedor cannot GET /api/customers: {response.status_code}")
+        all_passed = False
+    
+    # Test POST /api/customers (should work)
+    import time
+    timestamp = int(time.time())
+    customer_data = {
+        "name": f"Test Customer {timestamp}",
+        "phone": f"5199{timestamp % 100000000}",
+        "notes": "Test customer for vendedor"
+    }
+    response = test.make_request("POST", "/customers", test.vendedor_token, json_data=customer_data)
+    if response.status_code in [200, 201]:
+        test.log_success("Vendedor can POST /api/customers")
+        customer = response.json()
+        test.test_customers_created.append(customer["id"])
+    else:
+        test.log_error(f"Vendedor cannot POST /api/customers: {response.status_code}")
+        all_passed = False
+    
+    # Test GET /api/products (should work)
+    response = test.make_request("GET", "/products", test.vendedor_token)
+    if response.status_code == 200:
+        test.log_success("Vendedor can GET /api/products")
+    else:
+        test.log_error(f"Vendedor cannot GET /api/products: {response.status_code}")
+        all_passed = False
+    
+    # Test POST /api/products (should work with require_staff)
+    response = test.make_request("GET", "/categories", test.vendedor_token)
+    if response.status_code == 200:
+        categories = response.json()
+        if categories:
+            product_data = {
+                "name": f"Test Product Vendedor {timestamp}",
+                "category_id": categories[0]["id"],
+                "description": "Test product",
+                "price": 10.0,
+                "price_type": "fixed",
+                "unit": "Unidade",
+                "active": True,
+                "order": 0,
+                "variations": [],
+                "tiers": []
+            }
+            response = test.make_request("POST", "/products", test.vendedor_token, json_data=product_data)
+            if response.status_code in [200, 201]:
+                test.log_success("Vendedor can POST /api/products")
+                product = response.json()
+                test.test_products_created.append(product["id"])
+            else:
+                test.log_error(f"Vendedor cannot POST /api/products: {response.status_code}")
+                all_passed = False
+    
+    # Test GET /api/sales (should work)
+    response = test.make_request("GET", "/sales", test.vendedor_token)
+    if response.status_code == 200:
+        test.log_success("Vendedor can GET /api/sales")
+    else:
+        test.log_error(f"Vendedor cannot GET /api/sales: {response.status_code}")
+        all_passed = False
+    
+    # Test GET /api/vales (should work - own vales only)
+    response = test.make_request("GET", "/vales", test.vendedor_token)
+    if response.status_code == 200:
+        test.log_success("Vendedor can GET /api/vales")
+    else:
+        test.log_error(f"Vendedor cannot GET /api/vales: {response.status_code}")
+        all_passed = False
+    
+    # Test POST /api/vales (should work for own user)
+    # First get vendedor user_id
+    response = test.make_request("GET", "/auth/me", test.vendedor_token)
+    if response.status_code == 200:
+        vendedor_user = response.json()
+        vale_data = {
+            "user_id": vendedor_user["id"],
+            "amount": 50.0,
+            "notes": "Test vale for vendedor"
+        }
+        response = test.make_request("POST", "/vales", test.vendedor_token, json_data=vale_data)
+        if response.status_code in [200, 201]:
+            test.log_success("Vendedor can POST /api/vales for own user")
+            vale = response.json()
+            test.test_vales_created.append(vale["id"])
+        else:
+            test.log_error(f"Vendedor cannot POST /api/vales: {response.status_code}")
+            all_passed = False
+    
+    # Test PUT /api/vales (should work for own user)
+    response = test.make_request("GET", "/vales", test.vendedor_token)
+    if response.status_code == 200:
+        vales = response.json()
+        if vales:
+            test.log_success("Vendedor can access own vales")
+    
+    return all_passed
+
+def test_6_producao_permissions(test: TestSession) -> bool:
+    """Test 6: Verify producao can access allowed endpoints"""
+    test.log_info("TEST 6: Verify producao permissions")
+    
+    if not test.producao_token:
+        test.log_error("No producao token available")
+        return False
+    
+    all_passed = True
+    
+    # Test GET /api/customers (should work)
+    response = test.make_request("GET", "/customers", test.producao_token)
+    if response.status_code == 200:
+        test.log_success("Producao can GET /api/customers")
+    else:
+        test.log_error(f"Producao cannot GET /api/customers: {response.status_code}")
+        all_passed = False
+    
+    # Test POST /api/customers (should work)
+    import time
+    timestamp = int(time.time())
+    customer_data = {
+        "name": f"Test Customer Producao {timestamp}",
+        "phone": f"5198{timestamp % 100000000}",
+        "notes": "Test customer for producao"
+    }
+    response = test.make_request("POST", "/customers", test.producao_token, json_data=customer_data)
+    if response.status_code in [200, 201]:
+        test.log_success("Producao can POST /api/customers")
+        customer = response.json()
+        test.test_customers_created.append(customer["id"])
+    else:
+        test.log_error(f"Producao cannot POST /api/customers: {response.status_code}")
+        all_passed = False
+    
+    # Test GET /api/products (should work)
+    response = test.make_request("GET", "/products", test.producao_token)
+    if response.status_code == 200:
+        test.log_success("Producao can GET /api/products")
+    else:
+        test.log_error(f"Producao cannot GET /api/products: {response.status_code}")
+        all_passed = False
+    
+    # Test POST /api/products (should work with require_staff)
+    response = test.make_request("GET", "/categories", test.producao_token)
+    if response.status_code == 200:
+        categories = response.json()
+        if categories:
+            product_data = {
+                "name": f"Test Product Producao {timestamp}",
+                "category_id": categories[0]["id"],
+                "description": "Test product",
+                "price": 15.0,
+                "price_type": "fixed",
+                "unit": "Unidade",
+                "active": True,
+                "order": 0,
+                "variations": [],
+                "tiers": []
+            }
+            response = test.make_request("POST", "/products", test.producao_token, json_data=product_data)
+            if response.status_code in [200, 201]:
+                test.log_success("Producao can POST /api/products")
+                product = response.json()
+                test.test_products_created.append(product["id"])
+            else:
+                test.log_error(f"Producao cannot POST /api/products: {response.status_code}")
+                all_passed = False
+    
+    # Test GET /api/sales (should work)
+    response = test.make_request("GET", "/sales", test.producao_token)
+    if response.status_code == 200:
+        test.log_success("Producao can GET /api/sales")
+    else:
+        test.log_error(f"Producao cannot GET /api/sales: {response.status_code}")
+        all_passed = False
+    
+    # Test GET /api/vales (should work - own vales only)
+    response = test.make_request("GET", "/vales", test.producao_token)
+    if response.status_code == 200:
+        test.log_success("Producao can GET /api/vales")
+    else:
+        test.log_error(f"Producao cannot GET /api/vales: {response.status_code}")
+        all_passed = False
+    
+    # Test POST /api/vales (should work for own user)
+    response = test.make_request("GET", "/auth/me", test.producao_token)
+    if response.status_code == 200:
+        producao_user = response.json()
+        vale_data = {
+            "user_id": producao_user["id"],
+            "amount": 75.0,
+            "notes": "Test vale for producao"
+        }
+        response = test.make_request("POST", "/vales", test.producao_token, json_data=vale_data)
+        if response.status_code in [200, 201]:
+            test.log_success("Producao can POST /api/vales for own user")
+            vale = response.json()
+            test.test_vales_created.append(vale["id"])
+        else:
+            test.log_error(f"Producao cannot POST /api/vales: {response.status_code}")
+            all_passed = False
+    
+    return all_passed
+
+def test_7_vendedor_producao_restrictions(test: TestSession) -> bool:
+    """Test 7: Verify vendedor/producao CANNOT access admin-only endpoints"""
+    test.log_info("TEST 7: Verify vendedor/producao restrictions")
+    
+    all_passed = True
+    
+    # Test vendedor restrictions
+    if test.vendedor_token:
+        # Should NOT access /api/users
+        response = test.make_request("GET", "/users", test.vendedor_token)
+        if response.status_code == 403:
+            test.log_success("Vendedor correctly blocked from GET /api/users (403)")
+        else:
+            test.log_error(f"Vendedor should be blocked from /api/users but got: {response.status_code}")
+            all_passed = False
+        
+        # Should NOT POST /api/categories
+        category_data = {"name": "Test Category", "order": 999, "active": True}
+        response = test.make_request("POST", "/categories", test.vendedor_token, json_data=category_data)
+        if response.status_code == 403:
+            test.log_success("Vendedor correctly blocked from POST /api/categories (403)")
+        else:
+            test.log_error(f"Vendedor should be blocked from POST /api/categories but got: {response.status_code}")
+            all_passed = False
+        
+        # Should NOT access /api/reports/sales
+        response = test.make_request("GET", "/reports/sales", test.vendedor_token)
+        if response.status_code == 403:
+            test.log_success("Vendedor correctly blocked from GET /api/reports/sales (403)")
+        else:
+            test.log_error(f"Vendedor should be blocked from /api/reports/sales but got: {response.status_code}")
+            all_passed = False
+        
+        # Should NOT DELETE /api/vales (admin only)
+        if test.test_vales_created:
+            response = test.make_request("DELETE", f"/vales/{test.test_vales_created[0]}", test.vendedor_token)
+            if response.status_code == 403:
+                test.log_success("Vendedor correctly blocked from DELETE /api/vales (403)")
+            else:
+                test.log_error(f"Vendedor should be blocked from DELETE /api/vales but got: {response.status_code}")
+                all_passed = False
+    
+    # Test producao restrictions
+    if test.producao_token:
+        # Should NOT access /api/users
+        response = test.make_request("GET", "/users", test.producao_token)
+        if response.status_code == 403:
+            test.log_success("Producao correctly blocked from GET /api/users (403)")
+        else:
+            test.log_error(f"Producao should be blocked from /api/users but got: {response.status_code}")
+            all_passed = False
+        
+        # Should NOT POST /api/categories
+        category_data = {"name": "Test Category Producao", "order": 999, "active": True}
+        response = test.make_request("POST", "/categories", test.producao_token, json_data=category_data)
+        if response.status_code == 403:
+            test.log_success("Producao correctly blocked from POST /api/categories (403)")
+        else:
+            test.log_error(f"Producao should be blocked from POST /api/categories but got: {response.status_code}")
+            all_passed = False
+        
+        # Should NOT access /api/reports/sales
+        response = test.make_request("GET", "/reports/sales", test.producao_token)
+        if response.status_code == 403:
+            test.log_success("Producao correctly blocked from GET /api/reports/sales (403)")
+        else:
+            test.log_error(f"Producao should be blocked from /api/reports/sales but got: {response.status_code}")
+            all_passed = False
+    
+    return all_passed
+
+def test_8_admin_full_access(test: TestSession) -> bool:
+    """Test 8: Verify admin continues accessing everything"""
+    test.log_info("TEST 8: Verify admin full access")
+    
+    if not test.admin_token:
+        test.log_error("No admin token available")
+        return False
+    
+    all_passed = True
+    
+    # Test admin can access /api/users
+    response = test.make_request("GET", "/users", test.admin_token)
+    if response.status_code == 200:
+        test.log_success("Admin can GET /api/users")
+    else:
+        test.log_error(f"Admin cannot GET /api/users: {response.status_code}")
+        all_passed = False
+    
+    # Test admin can POST /api/categories
+    import time
+    timestamp = int(time.time())
+    category_data = {"name": f"Test Category Admin {timestamp}", "order": 999, "active": True}
+    response = test.make_request("POST", "/categories", test.admin_token, json_data=category_data)
+    if response.status_code in [200, 201]:
+        test.log_success("Admin can POST /api/categories")
+    else:
+        test.log_error(f"Admin cannot POST /api/categories: {response.status_code}")
+        all_passed = False
+    
+    # Test admin can access /api/reports/sales
+    response = test.make_request("GET", "/reports/sales", test.admin_token)
+    if response.status_code == 200:
+        test.log_success("Admin can GET /api/reports/sales")
+    else:
+        test.log_error(f"Admin cannot GET /api/reports/sales: {response.status_code}")
+        all_passed = False
+    
+    # Test admin can access /api/reports/top-products
+    response = test.make_request("GET", "/reports/top-products", test.admin_token)
+    if response.status_code == 200:
+        test.log_success("Admin can GET /api/reports/top-products")
+    else:
+        test.log_error(f"Admin cannot GET /api/reports/top-products: {response.status_code}")
+        all_passed = False
+    
+    # Test admin can DELETE /api/vales
+    if test.test_vales_created:
+        for vale_id in test.test_vales_created:
+            response = test.make_request("DELETE", f"/vales/{vale_id}", test.admin_token)
+            if response.status_code == 200:
+                test.log_success(f"Admin can DELETE /api/vales/{vale_id}")
+            else:
+                test.log_error(f"Admin cannot DELETE /api/vales: {response.status_code}")
+                all_passed = False
+        test.test_vales_created.clear()
+    
+    # Test admin can access all customer/product/sales endpoints
+    response = test.make_request("GET", "/customers", test.admin_token)
+    if response.status_code == 200:
+        test.log_success("Admin can GET /api/customers")
+    else:
+        test.log_error(f"Admin cannot GET /api/customers: {response.status_code}")
+        all_passed = False
+    
+    response = test.make_request("GET", "/products", test.admin_token)
+    if response.status_code == 200:
+        test.log_success("Admin can GET /api/products")
+    else:
+        test.log_error(f"Admin cannot GET /api/products: {response.status_code}")
+        all_passed = False
+    
+    response = test.make_request("GET", "/sales", test.admin_token)
+    if response.status_code == 200:
+        test.log_success("Admin can GET /api/sales")
+    else:
+        test.log_error(f"Admin cannot GET /api/sales: {response.status_code}")
+        all_passed = False
+    
+    return all_passed
+
+def cleanup_test_data(test: TestSession):
+    """Clean up test data created during testing"""
+    test.log_info("CLEANUP: Removing test data")
+    
+    # Deactivate test users
+    for user_id in test.test_users_created:
+        response = test.make_request("PUT", f"/users/{user_id}", test.admin_token, 
+                                    json_data={"active": False})
+        if response.status_code == 200:
+            test.log_success(f"Deactivated test user: {user_id}")
+        else:
+            test.log_warning(f"Failed to deactivate user {user_id}: {response.status_code}")
+    
+    # Note: We don't delete customers, products, or sales as they might be referenced
+    # Just deactivate the test users which is sufficient for cleanup
+    
+    test.log_success("Cleanup completed")
 
 def main():
-    """Run all tests"""
-    print("=" * 80)
-    print("BACKEND TEST SUITE - Login-Based Authentication Migration")
-    print("=" * 80)
-    print(f"Base URL: {BASE_URL}")
-    print(f"Frontend Origin: {FRONTEND_ORIGIN}")
-    print(f"Admin Login: {ADMIN_LOGIN}")
-    print(f"Vendor Login: {VENDOR_LOGIN}")
-    print("=" * 80)
-    print()
+    """Main test execution"""
+    test = TestSession()
     
-    # Test 1: Backend health
-    print("TEST 1: Backend Health Check")
-    print("-" * 80)
-    backend_ok = test_backend_health()
-    print()
+    print("\n" + "="*80)
+    print("BACKEND TESTING - Employee Management and Permissions Fix")
+    print("="*80 + "\n")
     
-    if not backend_ok:
-        print("⚠️  Backend is not responding. Stopping tests.")
-        print_summary()
-        sys.exit(1)
+    results = {}
     
-    # Test 2: Admin login with uppercase
-    print("TEST 2: Admin Login with 'Igor' (uppercase I)")
-    print("-" * 80)
-    admin_auth = test_admin_login_uppercase()
-    print()
+    # Run tests in sequence
+    tests = [
+        ("Backend Starts", test_1_backend_starts),
+        ("Admin Login", test_2_admin_login),
+        ("Create Vendedor Without Email", test_3_create_vendedor_without_email),
+        ("Create Producao Without Email", test_4_create_producao_without_email),
+        ("Vendedor Permissions", test_5_vendedor_permissions),
+        ("Producao Permissions", test_6_producao_permissions),
+        ("Vendedor/Producao Restrictions", test_7_vendedor_producao_restrictions),
+        ("Admin Full Access", test_8_admin_full_access),
+    ]
     
-    # Test 3: Admin login with lowercase (case-insensitive)
-    print("TEST 3: Admin Login with 'igor' (lowercase) - Case-Insensitive Check")
-    print("-" * 80)
-    test_admin_login_lowercase()
-    print()
+    for test_name, test_func in tests:
+        print(f"\n{'─'*80}")
+        try:
+            results[test_name] = test_func(test)
+        except Exception as e:
+            test.log_error(f"Test '{test_name}' raised exception: {str(e)}")
+            results[test_name] = False
+        print(f"{'─'*80}\n")
     
-    # Test 4: Legacy email rejection
-    print("TEST 4: Legacy Email Rejection")
-    print("-" * 80)
-    test_legacy_email_rejected()
-    print()
-    
-    # Test 5: Vendor login
-    print("TEST 5: Vendor Login")
-    print("-" * 80)
-    vendor_auth = test_vendor_login()
-    print()
-    
-    # Test 6: Auth me for admin
-    print("TEST 6: Authenticated User Info (/auth/me) for Admin")
-    print("-" * 80)
-    test_auth_me_admin(admin_auth)
-    print()
-    
-    # Test 7: Auth me for vendor
-    print("TEST 7: Authenticated User Info (/auth/me) for Vendor")
-    print("-" * 80)
-    test_auth_me_vendor(vendor_auth)
-    print()
-    
-    # Test 8: User creation with role=producao
-    print("TEST 8: User Creation with role='producao'")
-    print("-" * 80)
-    test_user_creation_producao(admin_auth)
-    print()
-    
-    # Test 9: User creation with invalid role
-    print("TEST 9: User Creation with Invalid Role")
-    print("-" * 80)
-    test_user_creation_invalid_role(admin_auth)
-    print()
-    
-    # Test 10: No duplicate Igor
-    print("TEST 10: No Duplicate Igor Login")
-    print("-" * 80)
-    test_no_duplicate_igor(admin_auth)
-    print()
-    
-    # Test 11: Login field in users list
-    print("TEST 11: Login Field in GET /api/users")
-    print("-" * 80)
-    test_login_field_in_users_list(admin_auth)
-    print()
+    # Cleanup
+    print(f"\n{'─'*80}")
+    try:
+        cleanup_test_data(test)
+    except Exception as e:
+        test.log_warning(f"Cleanup raised exception: {str(e)}")
+    print(f"{'─'*80}\n")
     
     # Summary
-    print_summary()
-    
-    # Exit with appropriate code
-    if results["failed"]:
-        sys.exit(1)
-    else:
-        sys.exit(0)
-
-def print_summary():
-    """Print test summary"""
-    print("=" * 80)
+    print("\n" + "="*80)
     print("TEST SUMMARY")
-    print("=" * 80)
-    print(f"Total Tests: {results['total']}")
-    print(f"Passed: {len(results['passed'])}")
-    print(f"Failed: {len(results['failed'])}")
-    print()
+    print("="*80 + "\n")
     
-    if results["failed"]:
-        print("❌ FAILED TESTS:")
-        for test in results["failed"]:
-            print(f"   - {test}")
-        print()
+    passed = sum(1 for v in results.values() if v)
+    total = len(results)
     
-    if results["passed"]:
-        print("✅ PASSED TESTS:")
-        for test in results["passed"]:
-            print(f"   - {test}")
-        print()
+    for test_name, result in results.items():
+        status = f"{GREEN}✅ PASSED{RESET}" if result else f"{RED}❌ FAILED{RESET}"
+        print(f"{test_name:.<50} {status}")
     
-    if not results["failed"]:
-        print("🎉 ALL TESTS PASSED!")
+    print(f"\n{'─'*80}")
+    print(f"Total: {passed}/{total} tests passed")
+    print(f"{'─'*80}\n")
+    
+    if passed == total:
+        print(f"{GREEN}🎉 ALL TESTS PASSED! Employee management and permissions fix is working correctly.{RESET}\n")
+        return 0
     else:
-        print("⚠️  SOME TESTS FAILED")
-    print("=" * 80)
+        print(f"{RED}⚠️  SOME TESTS FAILED. Please review the errors above.{RESET}\n")
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

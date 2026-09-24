@@ -2,14 +2,26 @@ import React, { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { brl, fmtDate } from "@/lib/format";
 import { Plus, Trash2 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
+
 
 export default function Vales() {
   const [users, setUsers] = useState([]);
   const [list, setList] = useState([]);
   const [form, setForm] = useState({ user_id: "", amount: 0, date: new Date().toISOString().slice(0,10), notes: "" });
+
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const load = () => api.get("/vales").then(r => setList(r.data));
-  useEffect(() => { api.get("/users").then(r => { setUsers(r.data); setForm(f => ({...f, user_id: r.data[0]?.id})); }); load(); }, []);
+  useEffect(() => {
+    if (user?.role === "admin") {
+      api.get("/users").then(r => { setUsers(r.data); setForm(f => ({ ...f, user_id: r.data[0]?.id || "" })); });
+    } else if (user) {
+      setUsers([user]); setForm(f => ({ ...f, user_id: user.id }));
+    }
+    load();
+  }, [user]);
   const save = async () => {
     if (!form.user_id || !form.amount) return toast.error("Preencha os campos");
     await api.post("/vales", form); load(); toast.success("Vale registrado");
@@ -36,7 +48,7 @@ export default function Vales() {
               <tr key={v.id} className="border-t border-zinc-800/60"><td className="px-3 py-2 text-zinc-300">{fmtDate(v.date)}</td>
                 <td className="text-white">{v.user_name}</td><td className="text-right text-yellow-400 font-mono">{brl(v.amount)}</td>
                 <td className="text-xs text-zinc-500">{v.notes}</td>
-                <td className="pr-3 text-right"><button onClick={() => del(v.id)} className="text-red-400"><Trash2 size={14} /></button></td>
+                <td className="pr-3 text-right">{isAdmin && <button onClick={() => del(v.id)} className="text-red-400"><Trash2 size={14} /></button>}</td>
               </tr>
             ))}</tbody>
           </table>

@@ -10,7 +10,7 @@ export default function Funcionarios() {
   useEffect(() => { load(); }, []);
   const save = async () => {
     try {
-      if (form.id) { const upd = { name: form.name, role: form.role, active: form.active }; if (form.password) upd.password = form.password; await api.put(`/users/${form.id}`, upd); }
+      if (form.id) { const upd = { login: form.login, name: form.name, role: form.role, active: form.active }; if (form.password) upd.password = form.password; await api.put(`/users/${form.id}`, upd); }
       else await api.post("/users", form);
       setForm({ login: "", password: "", name: "", role: "vendedor", active: true }); load(); toast.success("Salvo");
     } catch (e) { toast.error(e.response?.data?.detail || "Erro"); }
