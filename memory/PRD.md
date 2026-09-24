@@ -42,3 +42,15 @@ Sistema web completo para gestão de vendas, pedidos, clientes, funcionários e 
 - P1: Compartilhamento via Web Share API (WhatsApp direto) para tabelas.
 - P2: Auditoria detalhada com diff de campos, filtros de período rápido no dashboard.
 - P2: Notificações WhatsApp automáticas de status.
+
+## Etapa 3 (2026-02) — Kanban Pedidos/Produção
+- Busca por número do pedido, cliente, telefone, produto e observações (normalização acento-insensível).
+- Filtros rápidos: Hoje, Atrasados, Aguardando cliente. "Mais filtros": Vendedor, Status real, Prazo.
+- Colunas visuais agrupadas (sem alterar status no banco):
+  - "ARTE EM CRIAÇÃO / AGUARDANDO ARTE" mostra ambos os status; drop mapeia para "ARTE EM CRIAÇÃO".
+  - "EM PRODUÇÃO / ARTE APROVADA" mostra ambos; drop mapeia para "EM PRODUÇÃO".
+- Nova coluna derivada "EM ATRASO" (somente visualização, não permite drop) mostrando pedidos com `delivery_date` vencido e status ≠ ENTREGUE.
+- Coluna "ENTREGUE HOJE" mostra apenas pedidos com `delivered_at` = data local de hoje.
+- Backend: `PUT /api/sales/{sid}/status` grava `delivered_at` (ISO now) ao mover para ENTREGUE e faz `$unset` caso saia de ENTREGUE. Dados históricos preservados.
+- Lista (view "Lista") também respeita busca/filtros.
+

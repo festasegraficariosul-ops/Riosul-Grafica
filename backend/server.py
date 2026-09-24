@@ -698,9 +698,16 @@ async def sale_dup(sid: str, user=Depends(get_user)):
 
 @api.put("/sales/{sid}/status")
 async def sale_status(sid: str, payload: Dict[str, Any], user=Depends(get_user)):
-    await db.sales.update_one({"id": sid}, {"$set": {"status": payload["status"]}})
+    status = payload["status"]
+    now = now_iso()
+    update = {"$set": {"status": status}}
+    if status == "ENTREGUE":
+        update["$set"]["delivered_at"] = now
+    else:
+        update["$unset"] = {"delivered_at": ""}
+    await db.sales.update_one({"id": sid}, update)
     await db.audit_logs.insert_one({"id": new_id(), "user_id": user["id"], "action": "status_change",
-        "sale_id": sid, "status": payload["status"], "at": now_iso()})
+        "sale_id": sid, "status": status, "at": now})
     return {"ok": True}
 
 @api.post("/sales/{sid}/payment")
