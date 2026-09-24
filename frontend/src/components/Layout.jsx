@@ -34,11 +34,11 @@ export default function Layout() {
     <div className="min-h-screen flex bg-[#09090B] grain">
       {/* Sidebar */}
       <aside className={`fixed lg:sticky top-0 h-screen z-40 w-64 shrink-0 bg-zinc-950/95 border-r border-zinc-800/80 backdrop-blur-xl transition-transform ${open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-        <div className="px-5 py-5 border-b border-zinc-800/80 flex items-center justify-between">
-          <Link to="/" onClick={() => setOpen(false)}><Logo size={22} /></Link>
+        <div className="px-4 py-4 border-b border-zinc-800/80 flex items-center justify-between gap-2">
+          <Link to="/" onClick={() => setOpen(false)} className="flex-1"><Logo size={56} /></Link>
           <button className="lg:hidden text-zinc-400" onClick={() => setOpen(false)}><X size={18} /></button>
         </div>
-        <nav className="p-3 space-y-1 overflow-y-auto h-[calc(100vh-140px)]">
+        <nav className="p-3 space-y-1 overflow-y-auto h-[calc(100vh-160px)]">
           {items.map((n) => {
             const Icon = n.icon;
             return (
@@ -70,7 +70,7 @@ export default function Layout() {
       <div className="flex-1 min-w-0">
         <header className="sticky top-0 z-30 bg-zinc-950/90 border-b border-zinc-800/80 backdrop-blur-xl px-4 md:px-6 py-3 flex items-center gap-4 lg:hidden">
           <button className="text-zinc-300" onClick={() => setOpen(true)}><Menu size={20} /></button>
-          <Logo size={20} />
+          <Logo size={36} />
         </header>
         <main className="p-4 md:p-6 lg:p-8 relative z-10">
           <Outlet />

@@ -80,7 +80,7 @@ export default function Pedidos() {
   const [quickFilter, setQuickFilter] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
   const [filters, setFilters] = useState({ seller: "", status: "", deadline: "" });
-  const load = () => api.get("/sales").then((r) => setSales(r.data.filter((s) => !s.cancelled)));
+  const load = () => api.get("/sales").then((r) => setSales(r.data.filter((s) => !s.cancelled && s.send_to_production !== false)));
   useEffect(() => { load(); }, []);
 
   const move = async (id, status) => {

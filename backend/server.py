@@ -629,6 +629,7 @@ class SaleIn(BaseModel):
     channel: str = "Loja"; status: str = "PEDIDO RECEBIDO"
     delivery_date: Optional[str] = None; notes: str = ""
     attachments: List[str] = []
+    send_to_production: bool = True
 
 async def next_order_number():
     counter = await db.counters.find_one_and_update({"id": "order"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True)

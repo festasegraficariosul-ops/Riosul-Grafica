@@ -40,6 +40,7 @@ export default function NovaVenda({ editMode = false }) {
   const [showM2, setShowM2] = useState(null);
   const [showTier, setShowTier] = useState(null);
   const [orderNumber, setOrderNumber] = useState(null);
+  const [sendToProduction, setSendToProduction] = useState(true);
 
   useEffect(() => {
     api.get("/categories").then((r) => setCats(r.data.filter((c) => c.active)));
@@ -59,6 +60,7 @@ export default function NovaVenda({ editMode = false }) {
       setDeliveryDate(data.delivery_date || ""); setNotes(data.notes || "");
       setSurcharge(data.surcharge || 0); setGlobalDisc(data.discount || 0);
       setPayments(data.payments || []); setOrderNumber(data.order_number);
+      setSendToProduction(data.send_to_production !== false);
     }).catch(() => toast.error("Erro ao carregar pedido"));
   }, [editSaleId]);
 
@@ -153,6 +155,7 @@ export default function NovaVenda({ editMode = false }) {
       items: cart, discount: Number(globalDisc || 0), surcharge: Number(surcharge || 0),
       total, paid: totalPaid, payments, channel, status,
       delivery_date: deliveryDate || null, notes,
+      send_to_production: sendToProduction,
     };
     try {
       if (editSaleId) {
@@ -254,17 +257,24 @@ export default function NovaVenda({ editMode = false }) {
 
         <div className="lg:col-span-4 space-y-3 lg:sticky lg:top-4 self-start">
           <div className="card-riosul p-4">
-            <div className="text-xs uppercase tracking-wider text-zinc-500 mb-2 font-semibold">Cliente <span className="text-zinc-600 normal-case">(criado automaticamente)</span></div>
+            <div className="text-xs uppercase tracking-wider text-zinc-500 mb-2 font-semibold">Cliente <span className="text-zinc-600 normal-case">(opcional — criado automaticamente)</span></div>
             <div className="space-y-2">
               <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2">
                 <Phone size={14} className="text-zinc-500" />
-                <input data-testid="cust-phone" value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value, id: null })} onBlur={findCustomer} placeholder="Telefone/WhatsApp" className="flex-1 bg-transparent text-sm text-white outline-none" />
+                <input data-testid="cust-phone" value={customer.phone} onChange={(e) => setCustomer({ ...customer, phone: e.target.value, id: null })} onBlur={findCustomer} placeholder="Telefone/WhatsApp (opcional)" className="flex-1 bg-transparent text-sm text-white outline-none" />
               </div>
               <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2">
                 <User size={14} className="text-zinc-500" />
-                <input data-testid="cust-name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="Nome do cliente" className="flex-1 bg-transparent text-sm text-white outline-none" />
+                <input data-testid="cust-name" value={customer.name} onChange={(e) => setCustomer({ ...customer, name: e.target.value })} placeholder="Nome do cliente (opcional)" className="flex-1 bg-transparent text-sm text-white outline-none" />
               </div>
             </div>
+            <label className="mt-3 flex items-start gap-2 rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2.5 cursor-pointer hover:border-cyan-500/50 transition" data-testid="send-to-production-toggle">
+              <input type="checkbox" checked={sendToProduction} onChange={(e) => setSendToProduction(e.target.checked)} className="mt-0.5 accent-cyan-500 h-4 w-4 shrink-0" />
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-white">Enviar para Produção / Pedidos</div>
+                <div className="text-[11px] text-zinc-500 leading-snug">{sendToProduction ? "A venda aparece no Kanban de produção normalmente." : "Venda rápida / balcão: entra em Vendas, Caixa e Relatórios, mas NÃO aparece no Kanban."}</div>
+              </div>
+            </label>
           </div>
 
           <div className="card-riosul p-4 max-h-96 overflow-y-auto">
@@ -338,7 +348,7 @@ export default function NovaVenda({ editMode = false }) {
             </div>
             <button data-testid="finalizar-venda" onClick={finalize}
               className="w-full mt-2 bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2">
-              <CheckCircle2 size={16} /> {editSaleId ? "Salvar Pedido" : "Finalizar Venda"}
+              <CheckCircle2 size={16} /> {editSaleId ? "Salvar Pedido" : (sendToProduction ? "Finalizar Venda" : "Registrar Venda de Balcão")}
             </button>
           </div>
         </div>
