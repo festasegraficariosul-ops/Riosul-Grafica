@@ -35,6 +35,28 @@ export default function CentralShopee() {
     finally { setLoading(false); }
   };
 
+  const convertZipToPdf = async (file) => {
+    if (!file) return;
+    setLoading(true);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const res = await api.post("/shopee/convert-zpl", fd, { headers: { "Content-Type": "multipart/form-data" }, responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = "Etiquetas_Shopee.pdf"; a.click();
+      URL.revokeObjectURL(url);
+      toast.success("PDF gerado com sucesso!");
+    } catch (e) {
+      // response is a Blob → convert to text to read error
+      let msg = "Erro ao converter ZIP";
+      try {
+        const txt = await e.response?.data?.text?.();
+        if (txt) { try { msg = JSON.parse(txt).detail || msg; } catch { msg = txt; } }
+      } catch {}
+      toast.error(msg);
+    } finally { setLoading(false); }
+  };
+
   const uploadImage = async (oid, file) => {
     const fd = new FormData(); fd.append("file", file);
     const { data } = await api.post("/uploads", fd, { headers: { "Content-Type": "multipart/form-data" } });
@@ -64,10 +86,16 @@ export default function CentralShopee() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div><h1 className="text-2xl font-bold text-white">Central Shopee</h1>
           <p className="text-xs text-zinc-500">Importe o ZIP dos pedidos Shopee → gere PDFs e fichas de separação</p></div>
-        <label className="cursor-pointer bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-500 text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-2">
-          <Upload size={16} /> {loading ? "Importando..." : "Importar ZIP"}
-          <input ref={fileRef} type="file" accept=".zip" hidden onChange={(e) => e.target.files[0] && importZip(e.target.files[0])} />
-        </label>
+        <div className="flex flex-wrap gap-2">
+          <label className="cursor-pointer bg-zinc-800 hover:bg-zinc-700 border border-cyan-500/40 text-white font-bold px-4 py-2.5 rounded-lg flex items-center gap-2" data-testid="convert-zpl-btn">
+            <FileDown size={16} /> {loading ? "Convertendo..." : "Converter ZIP → PDF"}
+            <input type="file" accept=".zip" hidden onChange={(e) => e.target.files[0] && convertZipToPdf(e.target.files[0])} />
+          </label>
+          <label className="cursor-pointer bg-gradient-to-r from-pink-500 via-fuchsia-500 to-cyan-500 text-white font-bold px-5 py-2.5 rounded-lg flex items-center gap-2" data-testid="import-zip-btn">
+            <Upload size={16} /> {loading ? "Importando..." : "Importar ZIP"}
+            <input ref={fileRef} type="file" accept=".zip" hidden onChange={(e) => e.target.files[0] && importZip(e.target.files[0])} />
+          </label>
+        </div>
       </div>
 
       {importInfo && (

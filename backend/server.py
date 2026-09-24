@@ -1041,6 +1041,77 @@ def _safe_zip_extract(zip_bytes: bytes):
         with zf.open(info) as f: content = f.read()
         yield name, content
 
+def _split_zpl_labels(zpl_text: str) -> List[str]:
+    """Split ZPL stream into individual labels (^XA...^XZ)."""
+    matches = re.findall(r"\^XA.*?\^XZ", zpl_text, flags=re.DOTALL)
+    return matches or ([zpl_text] if zpl_text.strip() else [])
+
+def _extract_shopee_info_zpl(zpl_text: str) -> dict:
+    """Extract customer name and order number from a raw ZPL label.
+    Looks at ^FD (field data) values which hold printable label text.
+    """
+    result = {"customer_name": None, "order_number": None, "raw_text": ""}
+    try:
+        # Pull every ^FDvalue^FS
+        fields = re.findall(r"\^FD([^\^]*)\^FS", zpl_text)
+        # Cleanup lines
+        lines = [f.strip() for f in fields if f and f.strip()]
+        result["raw_text"] = "\n".join(lines)[:3000]
+        text = "\n".join(lines)
+
+        # Order number: Shopee IDs typically 14-20 digits, e.g., 2410XXXXXXXXXXXX
+        m = re.search(r"(?:N[º°]?\s*(?:do\s*)?[Pp]edido|Order\s*(?:No|ID)|C[óo]digo\s*do\s*Pedido|BR\d{15,})[:\s]*([A-Z0-9]{10,25})", text)
+        if not m:
+            m = re.search(r"\bBR\d{15,20}\b", text)
+            if m:
+                result["order_number"] = m.group(0).strip()
+        else:
+            result["order_number"] = m.group(1).strip()
+        if not result["order_number"]:
+            m = re.search(r"\b(\d{15,20})\b", text)
+            if m: result["order_number"] = m.group(1).strip()
+
+        # Customer name: look for label after "Destinatário"/"Recebedor"/"Ship to"
+        for i, l in enumerate(lines):
+            if re.match(r"^(destinat[áa]rio|recebedor|ship\s*to|para|nome do destinat[áa]rio|entregar)\s*[:\-]?\s*(.*)$", l, re.I):
+                # value may be on same line after colon or next line
+                same = re.split(r"[:\-]", l, maxsplit=1)
+                if len(same) > 1 and same[1].strip():
+                    result["customer_name"] = same[1].strip()
+                elif i + 1 < len(lines):
+                    result["customer_name"] = lines[i + 1].strip()
+                break
+        if not result["customer_name"]:
+            # Fallback: first CAPITALIZED name-like line (2+ words, letters only)
+            for l in lines:
+                if re.match(r"^[A-ZÀ-Ÿ][A-Za-zÀ-ÿ\.\s]{4,60}$", l) and len(l.split()) >= 2 and not any(w in l.upper() for w in ("SHOPEE","BRASIL","RUA","AV","AVENIDA","CEP","CNPJ","NF","BR")):
+                    result["customer_name"] = l.strip(); break
+    except Exception as e:
+        result["error"] = str(e)
+    return result
+
+def _zpl_to_pdf(zpl_text: str) -> bytes:
+    """Render ZPL to PDF via Labelary public API (203 dpi = 8 dpmm, 4x6")."""
+    import httpx
+    labels = _split_zpl_labels(zpl_text)
+    if not labels:
+        raise HTTPException(400, "ZPL vazio")
+    # Concatenate all labels and let Labelary paginate via index 0 = first;
+    # but a cleaner approach: request each label then merge with pypdf.
+    writer = PdfWriter()
+    with httpx.Client(timeout=30.0) as client_http:
+        for idx, lb in enumerate(labels):
+            r = client_http.post(
+                "http://api.labelary.com/v1/printers/8dpmm/labels/4x6/0/",
+                content=lb.encode("utf-8"),
+                headers={"Accept": "application/pdf", "Content-Type": "application/x-www-form-urlencoded"},
+            )
+            if r.status_code != 200:
+                raise HTTPException(502, f"Falha ao renderizar etiqueta {idx+1}: Labelary {r.status_code}")
+            reader = PdfReader(io.BytesIO(r.content))
+            for pg in reader.pages: writer.add_page(pg)
+    buf = io.BytesIO(); writer.write(buf); return buf.getvalue()
+
 def _extract_shopee_info(pdf_bytes: bytes) -> dict:
     """Extract customer and order number from PDF text."""
     result = {"customer_name": None, "order_number": None, "raw_text": ""}
@@ -1070,6 +1141,34 @@ def _extract_shopee_info(pdf_bytes: bytes) -> dict:
         result["error"] = str(e)
     return result
 
+@api.post("/shopee/convert-zpl")
+async def shopee_convert_zpl(file: UploadFile = File(...), user=Depends(get_user)):
+    """Convert a Shopee ZIP (containing ZPL/TXT/PRN) directly to a single merged PDF
+    with all labels — same behavior as the Converter_Shopee.ps1 script."""
+    content = await file.read()
+    if len(content) > 30 * 1024 * 1024: raise HTTPException(400, "ZIP maior que 30MB")
+    if not (file.filename or "").lower().endswith(".zip"): raise HTTPException(400, "Envie um arquivo .zip")
+    if content[:2] != b"PK": raise HTTPException(400, "Arquivo não é um ZIP válido")
+    combined_parts: List[str] = []
+    try:
+        for name, data in _safe_zip_extract(content):
+            ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+            if ext not in ("zpl", "txt", "prn"): continue
+            try:
+                combined_parts.append(data.decode("utf-8", errors="ignore"))
+            except Exception:
+                continue
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(400, f"Erro processando ZIP: {e}")
+    if not combined_parts:
+        raise HTTPException(400, "Não encontrei TXT/ZPL/PRN dentro do ZIP")
+    combined = "\r\n".join(combined_parts)
+    if "^XA" not in combined:
+        raise HTTPException(400, "Arquivos sem etiquetas ZPL válidas")
+    pdf_bytes = _zpl_to_pdf(combined)
+    return StreamingResponse(io.BytesIO(pdf_bytes), media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=Etiquetas_Shopee.pdf"})
+
 @api.post("/shopee/import")
 async def shopee_import(file: UploadFile = File(...), user=Depends(get_user)):
     content = await file.read()
@@ -1080,7 +1179,36 @@ async def shopee_import(file: UploadFile = File(...), user=Depends(get_user)):
     try:
         for name, data in _safe_zip_extract(content):
             ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-            if ext == "pdf":
+            if ext in ("zpl", "txt", "prn"):
+                # Shopee sends labels in ZPL text. Split, extract info, render to PDF via Labelary.
+                try:
+                    zpl_text = data.decode("utf-8", errors="ignore")
+                except Exception:
+                    skipped.append({"file": name, "reason": "não foi possível ler o arquivo"}); continue
+                if "^XA" not in zpl_text:
+                    skipped.append({"file": name, "reason": "arquivo sem etiquetas ZPL válidas"}); continue
+                labels = _split_zpl_labels(zpl_text)
+                for lb_idx, lb in enumerate(labels):
+                    info = _extract_shopee_info_zpl(lb)
+                    order_no = info.get("order_number") or f"S-{new_id()[:8].upper()}"
+                    if await db.shopee_orders.find_one({"order_number": order_no, "identified": True}):
+                        duplicates.append(order_no); continue
+                    try:
+                        pdf_bytes = _zpl_to_pdf(lb)
+                    except HTTPException as e:
+                        skipped.append({"file": name, "reason": f"etiqueta {lb_idx+1}: {e.detail}"}); continue
+                    except Exception as e:
+                        skipped.append({"file": name, "reason": f"etiqueta {lb_idx+1}: {e}"}); continue
+                    url = save_file_bytes(pdf_bytes, "pdf")
+                    doc = {"id": new_id(), "order_number": order_no,
+                        "customer_name": info.get("customer_name") or None,
+                        "identified": bool(info.get("order_number")) and bool(info.get("customer_name")),
+                        "source_file": name, "page_index": lb_idx,
+                        "document_url": url, "images": [], "status": "AGUARDANDO IMAGEM",
+                        "notes": "", "created_at": now_iso(), "user_id": user["id"],
+                        "source_format": "zpl"}
+                    await db.shopee_orders.insert_one(doc); doc.pop("_id", None); imported.append(doc)
+            elif ext == "pdf":
                 # split PDF into pages, each page as separate order
                 try:
                     reader = PdfReader(io.BytesIO(data))
