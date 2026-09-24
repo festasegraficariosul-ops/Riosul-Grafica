@@ -588,6 +588,19 @@ async def cust_upd(cid: str, body: CustomerIn, user=Depends(get_user)):
     await db.customers.update_one({"id": cid}, {"$set": body.model_dump()})
     return await db.customers.find_one({"id": cid}, {"_id": 0})
 
+@api.delete("/customers/{cid}")
+async def cust_del(cid: str, user=Depends(require_admin)):
+    c = await db.customers.find_one({"id": cid})
+    if not c:
+        raise HTTPException(404, "Cliente não encontrado")
+    linked = await db.sales.count_documents({"customer_id": cid})
+    if linked > 0:
+        raise HTTPException(400, f"Cliente possui {linked} pedido(s) vinculado(s). Exclua ou cancele os pedidos antes.")
+    await db.customers.delete_one({"id": cid})
+    await db.audit_logs.insert_one({"id": new_id(), "user_id": user["id"], "action": "customer_delete",
+        "customer_id": cid, "customer_name": c.get("name"), "at": now_iso()})
+    return {"ok": True}
+
 @api.get("/customers/{cid}")
 async def cust_get(cid: str, user=Depends(get_user)):
     c = await db.customers.find_one({"id": cid}, {"_id": 0})
@@ -736,6 +749,18 @@ async def sale_cancel(sid: str, user=Depends(require_admin)):
     await db.sales.update_one({"id": sid}, {"$set": {"cancelled": True, "status": "CANCELADO"}})
     await db.audit_logs.insert_one({"id": new_id(), "user_id": user["id"], "action": "sale_cancel",
         "sale_id": sid, "at": now_iso()})
+    return {"ok": True}
+
+@api.delete("/sales/{sid}/hard")
+async def sale_hard_delete(sid: str, user=Depends(require_admin)):
+    sale = await db.sales.find_one({"id": sid})
+    if not sale:
+        raise HTTPException(404, "Pedido não encontrado")
+    if not sale.get("cancelled") and sale.get("status") != "CANCELADO":
+        raise HTTPException(400, "Só é possível excluir permanentemente pedidos cancelados")
+    await db.sales.delete_one({"id": sid})
+    await db.audit_logs.insert_one({"id": new_id(), "user_id": user["id"], "action": "sale_hard_delete",
+        "sale_id": sid, "order_number": sale.get("order_number"), "at": now_iso()})
     return {"ok": True}
 
 # ---------- PDF: Note / Production Order ----------

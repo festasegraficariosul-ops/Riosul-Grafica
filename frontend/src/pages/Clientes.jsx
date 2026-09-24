@@ -3,12 +3,15 @@ import api from "@/lib/api";
 import { brl, fmtDate } from "@/lib/format";
 import { Plus, Trash2, Edit } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Clientes() {
   const [list, setList] = useState([]);
   const [q, setQ] = useState("");
   const [form, setForm] = useState({ name: "", phone: "", notes: "" });
   const [detail, setDetail] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null);
+  const { user } = useAuth();
 
   const load = () => api.get("/customers", { params: q ? { q } : {} }).then(r => setList(r.data));
   useEffect(() => { load(); }, [q]);
@@ -23,6 +26,19 @@ export default function Clientes() {
 
   const openDetail = async (c) => {
     const { data } = await api.get(`/customers/${c.id}`); setDetail(data);
+  };
+
+  const removeCustomer = async () => {
+    if (!confirmDel) return;
+    try {
+      await api.delete(`/customers/${confirmDel.id}`);
+      toast.success(`Cliente ${confirmDel.name} excluído`);
+      if (form.id === confirmDel.id) setForm({ name: "", phone: "", notes: "" });
+      setConfirmDel(null);
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Erro ao excluir cliente");
+    }
   };
 
   return (
@@ -47,8 +63,13 @@ export default function Clientes() {
                     <td className="py-2 text-white">{c.name}</td>
                     <td className="text-zinc-400">{c.phone}</td>
                     <td className="text-right pr-2">
-                      <button onClick={() => setForm(c)} className="text-cyan-400 mr-2"><Edit size={14} /></button>
-                      <button onClick={() => openDetail(c)} className="text-yellow-400 text-xs">Histórico</button>
+                      <div className="inline-flex items-center gap-3">
+                        <button onClick={() => setForm(c)} className="text-cyan-400" title="Editar" data-testid={`edit-customer-${c.id}`}><Edit size={14} /></button>
+                        <button onClick={() => openDetail(c)} className="text-yellow-400 text-xs" data-testid={`history-customer-${c.id}`}>Histórico</button>
+                        {user?.role === "admin" && (
+                          <button onClick={() => setConfirmDel(c)} className="text-red-400 hover:text-red-300" title="Excluir cliente" data-testid={`delete-customer-${c.id}`}><Trash2 size={14} /></button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -76,6 +97,22 @@ export default function Clientes() {
                     {s.balance > 0 && <div className="text-xs text-red-400">Saldo {brl(s.balance)}</div>}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmDel && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setConfirmDel(null)}>
+          <div className="card-riosul p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()} data-testid="confirm-delete-customer-modal">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 rounded-full bg-red-500/15 text-red-400"><Trash2 size={20} /></div>
+              <h2 className="text-lg font-bold text-white">Excluir cliente</h2>
+            </div>
+            <p className="text-sm text-zinc-300 mb-1">Tem certeza que deseja excluir <b className="text-red-300">permanentemente</b> o cadastro de <b className="text-cyan-300">{confirmDel.name}</b>?</p>
+            <p className="text-xs text-zinc-500 mb-5">Clientes com pedidos vinculados não podem ser excluídos. Essa ação não pode ser desfeita.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmDel(null)} data-testid="cancel-delete-customer" className="px-4 py-2 rounded text-sm font-bold bg-zinc-800 text-white hover:bg-zinc-700">Não</button>
+              <button onClick={removeCustomer} data-testid="confirm-delete-customer" className="px-4 py-2 rounded text-sm font-bold bg-red-500 text-white hover:bg-red-600">Sim, excluir</button>
             </div>
           </div>
         </div>

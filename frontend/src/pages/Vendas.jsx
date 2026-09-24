@@ -9,11 +9,24 @@ import { useAuth } from "@/context/AuthContext";
 export function Vendas() {
   const [sales, setSales] = useState([]);
   const [q, setQ] = useState(""); const [start, setStart] = useState(""); const [end, setEnd] = useState("");
+  const [confirmDel, setConfirmDel] = useState(null);
+  const { user } = useAuth();
   const load = () => {
     const params = {}; if (q) params.q = q; if (start) params.start = start; if (end) params.end = end;
     api.get("/sales", { params }).then((r) => setSales(r.data));
   };
   useEffect(() => { load(); }, []);
+  const hardDelete = async () => {
+    if (!confirmDel) return;
+    try {
+      await api.delete(`/sales/${confirmDel.id}/hard`);
+      toast.success(`Pedido #${confirmDel.order_number} excluído do histórico`);
+      setConfirmDel(null);
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Erro ao excluir");
+    }
+  };
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-white">Vendas</h1>
@@ -34,23 +47,49 @@ export function Vendas() {
               <th className="text-right">Saldo</th><th className="text-left">Status</th><th></th></tr>
           </thead>
           <tbody>
-            {sales.map((s) => (
-              <tr key={s.id} className="border-t border-zinc-800/60 hover:bg-zinc-900/40">
-                <td className="px-3 py-2 text-cyan-400 font-mono">#{s.order_number}</td>
-                <td className="text-zinc-300">{fmtDate(s.created_at)}</td>
-                <td className="text-zinc-300">{s.seller_name}</td>
-                <td className="text-white">{s.customer_name || "-"}</td>
-                <td className="text-zinc-400">{s.channel}</td>
-                <td className="text-right text-yellow-400 font-mono">{brl(s.total)}</td>
-                <td className="text-right text-red-400 font-mono">{brl(s.balance)}</td>
-                <td><span className="text-xs px-2 py-1 rounded bg-zinc-800 text-white">{s.status}</span></td>
-                <td className="pr-3"><Link to={`/vendas/${s.id}`} className="text-cyan-400"><Eye size={14} /></Link></td>
-              </tr>
-            ))}
+            {sales.map((s) => {
+              const isCancelled = s.cancelled || s.status === "CANCELADO";
+              return (
+                <tr key={s.id} className="border-t border-zinc-800/60 hover:bg-zinc-900/40">
+                  <td className="px-3 py-2 text-cyan-400 font-mono">#{s.order_number}</td>
+                  <td className="text-zinc-300">{fmtDate(s.created_at)}</td>
+                  <td className="text-zinc-300">{s.seller_name}</td>
+                  <td className="text-white">{s.customer_name || "-"}</td>
+                  <td className="text-zinc-400">{s.channel}</td>
+                  <td className="text-right text-yellow-400 font-mono">{brl(s.total)}</td>
+                  <td className="text-right text-red-400 font-mono">{brl(s.balance)}</td>
+                  <td><span className={`text-xs px-2 py-1 rounded ${isCancelled ? "bg-red-900/60 text-red-200" : "bg-zinc-800 text-white"}`}>{s.status}</span></td>
+                  <td className="pr-3">
+                    <div className="flex items-center justify-end gap-2">
+                      <Link to={`/vendas/${s.id}`} className="text-cyan-400" data-testid={`view-sale-${s.order_number}`} title="Abrir detalhes"><Eye size={14} /></Link>
+                      {isCancelled && user?.role === "admin" && (
+                        <button onClick={() => setConfirmDel(s)} className="text-red-400 hover:text-red-300" data-testid={`delete-sale-${s.order_number}`} title="Excluir permanentemente"><Trash2 size={14} /></button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
             {sales.length === 0 && <tr><td colSpan="9" className="text-center py-10 text-zinc-500">Nenhuma venda</td></tr>}
           </tbody>
         </table>
       </div>
+      {confirmDel && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setConfirmDel(null)}>
+          <div className="card-riosul p-6 max-w-md w-full" onClick={(e) => e.stopPropagation()} data-testid="confirm-delete-sale-modal">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 rounded-full bg-red-500/15 text-red-400"><Trash2 size={20} /></div>
+              <h2 className="text-lg font-bold text-white">Excluir do histórico</h2>
+            </div>
+            <p className="text-sm text-zinc-300 mb-1">Tem certeza que deseja excluir <b className="text-red-300">permanentemente</b> o pedido <b className="text-cyan-300">#{confirmDel.order_number}</b> do histórico?</p>
+            <p className="text-xs text-zinc-500 mb-5">Essa ação não pode ser desfeita.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmDel(null)} data-testid="cancel-delete-sale" className="px-4 py-2 rounded text-sm font-bold bg-zinc-800 text-white hover:bg-zinc-700">Não</button>
+              <button onClick={hardDelete} data-testid="confirm-delete-sale" className="px-4 py-2 rounded text-sm font-bold bg-red-500 text-white hover:bg-red-600">Sim, excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
