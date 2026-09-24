@@ -248,25 +248,54 @@ async def seed_real_catalog():
     await db.settings.update_one({"id": "seed_v2"}, {"$set": {"id": "seed_v2", "done": True, "at": now_iso()}}, upsert=True)
 
 # ---------- Startup ----------
+async def ensure_user_logins():
+    users = await db.users.find({}, {"_id": 0, "id": 1, "login": 1, "email": 1}).to_list(1000)
+    used = set()
+    for u in users:
+        login = (u.get("login") or "").strip().lower()
+        if not login:
+            login = (u.get("email") or "").split("@", 1)[0].strip().lower() or u["id"][:8]
+        base = login
+        suffix = 2
+        while login in used:
+            login = f"{base}{suffix}"
+            suffix += 1
+        used.add(login)
+        if u.get("login") != login:
+            await db.users.update_one({"id": u["id"]}, {"$set": {"login": login}})
+
 @app.on_event("startup")
 async def startup():
+    await ensure_user_logins()
     await db.users.create_index("email", unique=True)
+    await db.users.create_index("login", unique=True)
     await db.customers.create_index("phone")
     await db.sales.create_index("order_number")
     await db.shopee_orders.create_index("order_number")
-    email = os.environ["ADMIN_EMAIL"].lower()
+    admin_login = os.environ.get("ADMIN_LOGIN", "igor").strip().lower()
+    legacy_email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
     pw = os.environ["ADMIN_PASSWORD"]
     name = os.environ.get("ADMIN_NAME", "Admin")
-    existing = await db.users.find_one({"email": email})
+    existing = await db.users.find_one({"login": admin_login})
+    if not existing and legacy_email:
+        existing = await db.users.find_one({"email": legacy_email})
     if not existing:
-        await db.users.insert_one({"id": new_id(), "email": email, "password_hash": hash_pw(pw),
-                                   "name": name, "role": "admin", "active": True, "created_at": now_iso()})
-    elif not verify_pw(pw, existing["password_hash"]):
-        await db.users.update_one({"email": email}, {"$set": {"password_hash": hash_pw(pw), "role": "admin"}})
-    if not await db.users.find_one({"email": "vendedor@riosul.com"}):
-        await db.users.insert_one({"id": new_id(), "email": "vendedor@riosul.com",
+        await db.users.insert_one({"id": new_id(), "login": admin_login, "email": legacy_email,
+                                   "password_hash": hash_pw(pw), "name": name, "role": "admin",
+                                   "active": True, "created_at": now_iso()})
+    else:
+        update = {"login": admin_login, "role": "admin", "name": name, "active": True}
+        if not verify_pw(pw, existing["password_hash"]): update["password_hash"] = hash_pw(pw)
+        await db.users.update_one({"id": existing["id"]}, {"$set": update})
+    vendor = await db.users.find_one({"login": "vendedor"})
+    if not vendor:
+        vendor = await db.users.find_one({"email": "vendedor@riosul.com"})
+    if not vendor:
+        await db.users.insert_one({"id": new_id(), "login": "vendedor", "email": "vendedor@riosul.com",
                                    "password_hash": hash_pw("Vendedor@2026"), "name": "Vendedor Demo",
                                    "role": "vendedor", "active": True, "created_at": now_iso()})
+    elif not vendor.get("login"):
+        await db.users.update_one({"id": vendor["id"]}, {"$set": {"login": "vendedor"}})
     if await db.channels.count_documents({}) == 0:
         for n in ["Loja","WhatsApp","Instagram","Shopee","Outro"]:
             await db.channels.insert_one({"id": new_id(), "name": n, "active": True})
@@ -285,7 +314,7 @@ async def startup():
 
 # ---------- Auth ----------
 class LoginIn(BaseModel):
-    email: EmailStr
+    login: str
     password: str
 
 def set_cookies(resp: Response, access: str, refresh: str):
@@ -294,13 +323,16 @@ def set_cookies(resp: Response, access: str, refresh: str):
 
 @api.post("/auth/login")
 async def login(body: LoginIn, response: Response):
-    u = await db.users.find_one({"email": body.email.lower()})
+    login_value = body.login.strip().lower()
+    u = await db.users.find_one({"login": login_value})
     if not u or not u.get("active", True) or not verify_pw(body.password, u["password_hash"]):
         raise HTTPException(401, "Credenciais inválidas")
-    access = make_access(u["id"], u["email"], u["role"])
+    identity = u.get("email") or u["login"]
+    access = make_access(u["id"], identity, u["role"])
     refresh = make_refresh(u["id"])
     set_cookies(response, access, refresh)
-    return {"id": u["id"], "email": u["email"], "name": u["name"], "role": u["role"], "access_token": access}
+    return {"id": u["id"], "login": u["login"], "email": u.get("email", ""), "name": u["name"],
+            "role": u["role"], "access_token": access}
 
 @api.post("/auth/logout")
 async def logout(response: Response, user=Depends(get_user)):
@@ -320,15 +352,19 @@ async def refresh(request: Request, response: Response):
         if p.get("type") != "refresh": raise HTTPException(401)
         u = await db.users.find_one({"id": p["sub"]})
         if not u: raise HTTPException(401)
-        access = make_access(u["id"], u["email"], u["role"])
+        access = make_access(u["id"], u.get("email") or u["login"], u["role"])
         response.set_cookie("access_token", access, httponly=True, secure=True, samesite="none", max_age=43200, path="/")
         return {"ok": True}
     except jwt.InvalidTokenError: raise HTTPException(401)
 
 # ---------- Users ----------
 class UserIn(BaseModel):
-    email: EmailStr; password: str; name: str
-    role: str = "vendedor"; active: bool = True
+    login: str
+    password: str
+    name: str
+    role: str = "vendedor"
+    active: bool = True
+    email: Optional[EmailStr] = None
 
 @api.get("/users")
 async def list_users(user=Depends(require_admin)):
@@ -336,18 +372,33 @@ async def list_users(user=Depends(require_admin)):
 
 @api.post("/users")
 async def create_user(body: UserIn, user=Depends(require_admin)):
-    if await db.users.find_one({"email": body.email.lower()}): raise HTTPException(400, "Email já cadastrado")
-    d = {"id": new_id(), "email": body.email.lower(), "password_hash": hash_pw(body.password),
-         "name": body.name, "role": body.role, "active": body.active, "created_at": now_iso()}
+    login = body.login.strip().lower()
+    if not login: raise HTTPException(400, "Login é obrigatório")
+    if body.role not in {"admin", "vendedor", "producao"}: raise HTTPException(400, "Função inválida")
+    if await db.users.find_one({"login": login}): raise HTTPException(400, "Login já cadastrado")
+    d = {"id": new_id(), "login": login, "email": str(body.email).lower() if body.email else "",
+         "password_hash": hash_pw(body.password), "name": body.name, "role": body.role,
+         "active": body.active, "created_at": now_iso()}
     await db.users.insert_one(d); d.pop("password_hash"); d.pop("_id", None); return d
 
 class UserUpd(BaseModel):
-    name: Optional[str] = None; role: Optional[str] = None
-    active: Optional[bool] = None; password: Optional[str] = None
+    login: Optional[str] = None
+    name: Optional[str] = None
+    role: Optional[str] = None
+    active: Optional[bool] = None
+    password: Optional[str] = None
 
 @api.put("/users/{uid}")
 async def update_user(uid: str, body: UserUpd, user=Depends(require_admin)):
-    upd = {k: v for k, v in body.model_dump().items() if v is not None and k != "password"}
+    upd = {k: v for k, v in body.model_dump().items() if v is not None and k not in {"password", "login"}}
+    if body.login is not None:
+        login = body.login.strip().lower()
+        if not login: raise HTTPException(400, "Login é obrigatório")
+        duplicate = await db.users.find_one({"login": login, "id": {"$ne": uid}})
+        if duplicate: raise HTTPException(400, "Login já cadastrado")
+        upd["login"] = login
+    if body.role is not None and body.role not in {"admin", "vendedor", "producao"}:
+        raise HTTPException(400, "Função inválida")
     if body.password: upd["password_hash"] = hash_pw(body.password)
     await db.users.update_one({"id": uid}, {"$set": upd})
     return await db.users.find_one({"id": uid}, {"password_hash": 0, "_id": 0})

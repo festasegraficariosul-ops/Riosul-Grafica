@@ -6,9 +6,9 @@ import { formatApiError } from "@/lib/format";
 import { Loader2 } from "lucide-react";
 
 export default function Login() {
-  const { user, login } = useAuth();
+  const { user, login: authenticate } = useAuth();
   const nav = useNavigate();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,7 +17,7 @@ export default function Login() {
 
   const onSubmit = async (e) => {
     e.preventDefault(); setErr(""); setLoading(true);
-    try { await login(email, password); nav("/"); }
+    try { await authenticate(username, password); nav("/"); }
     catch (e) { setErr(formatApiError(e.response?.data?.detail) || "Erro ao entrar"); }
     finally { setLoading(false); }
   };
@@ -33,8 +33,8 @@ export default function Login() {
           <p className="text-sm text-zinc-400 mb-6">Acesse o sistema de gestão da Rio Sul</p>
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
-              <label className="text-xs uppercase tracking-wider text-zinc-400 font-semibold">Email</label>
-              <input data-testid="login-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+              <label className="text-xs uppercase tracking-wider text-zinc-400 font-semibold">Login</label>
+              <input data-testid="login-username" type="text" required value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Digite seu login"
                 className="mt-1 w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-cyan-500 text-sm" />
             </div>
             <div>

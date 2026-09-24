@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Restaurar o acesso do administrador existente sem recriar autenticação; garantir que festasegraficariosul@gmail.com com senha 02578491 tenha role admin e consiga fazer login."
+user_problem_statement: "Substituir login por email por login de usuário: Igor/02578491 como admin, preservar vendedor e adicionar função produção."
 backend:
   - task: "Admin existente atualizado e login"
     implemented: true
@@ -124,6 +124,12 @@ backend:
       - working: true
         agent: "testing"
         comment: "✅ CORS FIX VERIFIED - Backend CORS configuration is CORRECT. (1) Backend starts without errors after CORS fix in /app/backend/server.py. (2) CORS middleware moved to line 36 (immediately after FastAPI app creation) with explicit FRONTEND_URL origin. (3) Direct backend test (localhost:8001): OPTIONS preflight returns 200 OK with correct Access-Control-Allow-Origin header matching frontend origin exactly, Access-Control-Allow-Credentials=true, all methods and headers allowed. (4) POST /api/auth/login with festasegraficariosul@gmail.com / 02578491 returns 200 OK, role=admin verified, Access-Control-Allow-Origin header present on localhost. (5) GET /api/auth/me with Bearer token returns 200 OK with correct user data. (6) No duplicate admin users exist. IMPORTANT NOTE: Public URL tests show ingress/proxy layer is stripping Access-Control-Allow-Origin header (returns 400 for OPTIONS, missing header on POST), but backend itself is configured correctly as proven by localhost tests. This is an infrastructure/ingress issue, not a backend code issue. The CORS fix in server.py is complete and working."
+      - working: "NA"
+        agent: "main"
+        comment: "Autenticação migrada para campo login; startup migra usuários existentes, promove Igor a admin e adiciona suporte à role producao. Validar login Igor, rejeição do email antigo, vendedor e contratos de usuários."
+      - working: true
+        agent: "testing"
+        comment: "✅ LOGIN-BASED AUTHENTICATION MIGRATION VERIFIED - All 32 tests passed. (1) Backend starts without errors, startup migration function ensure_user_logins() successfully migrates existing users to login field. (2) POST /api/auth/login with {\"login\":\"Igor\",\"password\":\"02578491\"} returns 200 OK, role=admin, name=Administrador, access_token provided, login field present in response. (3) Case-insensitive login confirmed: {\"login\":\"igor\",\"password\":\"02578491\"} also returns 200 OK with role=admin. (4) Legacy email rejection verified: {\"login\":\"festasegraficariosul@gmail.com\",\"password\":\"02578491\"} correctly returns 401 Unauthorized - email no longer accepted as login identifier. (5) Vendor login confirmed: {\"login\":\"vendedor\",\"password\":\"Vendedor@2026\"} returns 200 OK with role=vendedor, login field=vendedor. (6) GET /api/auth/me validated for both admin and vendor with Bearer tokens - returns 200 OK with correct user data (login, role, user_id match). (7) POST /api/users accepts role=producao (200 OK, user created with role=producao) and rejects invalid role=superadmin (400 Bad Request). Test user was deactivated after creation. (8) No duplicate Igor login confirmed: exactly 1 user with login=igor exists, user_id matches logged-in admin. (9) Login field appears in GET /api/users: all 3 users have login field (sample: igor, vendedor, test_producao_23). Migration complete and working correctly."
 frontend:
   - task: "Frontend original importado e compilado"
     implemented: true
@@ -136,7 +142,7 @@ frontend:
       - working: true
         agent: "main"
         comment: "Projeto importado; frontend compilou com avisos existentes de hooks, sem erro de build."
-  - task: "Login UI flow com credenciais festasegraficariosul@gmail.com"
+  - task: "Login UI flow com login de usuário"
     implemented: true
     working: true
     file: "/app/frontend/src/pages/Login.jsx"
@@ -144,23 +150,20 @@ frontend:
     priority: "high"
     needs_retesting: false
     status_history:
-      - working: true
-        agent: "testing"
-        comment: "✅ LOGIN UI FLOW FULLY VERIFIED - Comprehensive Playwright testing completed using data-testid selectors (login-email, login-password, login-submit). Tested with credentials festasegraficariosul@gmail.com / 02578491. FINDINGS: (1) Login form renders correctly with all required elements. (2) POST /api/auth/login returns HTTP 200 OK with valid access_token and admin role. (3) Token successfully stored in localStorage. (4) User redirected from /login to / (dashboard) after successful authentication. (5) Dashboard loads correctly showing 'Administrador' user. (6) All dashboard API calls (GET /api/dashboard) return 200 OK. (7) Initial GET /api/auth/me calls return 401 BEFORE login (expected behavior - user not yet authenticated). (8) NO 'Erro desconhecido' (Unknown error) was displayed at any point. (9) Backend logs confirm successful authentication flow. CONCLUSION: The reported login error could NOT be reproduced. Login flow works perfectly end-to-end. The user may have confused dashboard metrics ('A receber R$ 0,00') with error messages, or the issue was already resolved."
       - working: "NA"
         agent: "main"
-        comment: "Usuário reportou persistência do erro no navegador real; após corrigir CORS/origem explícita, repetir teste E2E no frontend."
+        comment: "Tela alterada de email para login textual; validar Igor case-insensitive, rejeição do email antigo e navegação ao dashboard."
       - working: true
         agent: "testing"
-        comment: "✅ LOGIN FLOW VERIFIED AFTER CORS FIX - Tested in clean browser session from public URL. ALL 5 VALIDATION REQUIREMENTS MET: (1) NO 'Erro desconhecido' message found anywhere. (2) POST /api/auth/login reaches backend successfully with HTTP 200 OK, returns valid access_token, role=admin, correct email. (3) Navigation successful from /login to / (dashboard). (4) Dashboard displays 'Administrador' in sidebar (bottom left: 'Logado como Administrador'). (5) Subsequent API calls use Bearer token - confirmed 2 authenticated requests to /api/dashboard with Authorization header. Console shows only expected 401s for pre-login /api/auth/me checks and minor chart rendering warnings (not login-related). Network analysis: Login request URL correct (https://eb37b9d8-61b4-46ff-bf7b-5fcd9d03495c.preview.emergentagent.com/api/auth/login), CORS headers present (access-control-allow-credentials: true). Page origin matches configured FRONTEND_URL. Token stored in localStorage (261 chars). INFRASTRUCTURE NOTE: Ingress/proxy adds wildcard CORS headers to some responses, but this does NOT break functionality - login flow works perfectly end-to-end. The CORS fix in backend server.py is effective."
+        comment: "✅ LOGIN UI MIGRATION COMPLETE - All 8 comprehensive tests passed. (1) Login page has text field with label 'Login' and data-testid='login-username' (NOT email field, type='text'). (2) Login with 'Igor' (capital I) and password '02578491' works: POST /api/auth/login with body {\"login\":\"Igor\",\"password\":\"02578491\"} returns 200 OK. (3) Case-insensitive login confirmed: lowercase 'igor' also returns 200 OK. (4) User navigates to dashboard (/) and sees 'Administrador' displayed in sidebar with role 'admin'. (5) Logout functionality works correctly, redirects to /login. (6) Old email 'festasegraficariosul@gmail.com' is correctly rejected with 401 Unauthorized and error message 'Credenciais inválidas'. (7) /funcionarios page verified: form has input with placeholder 'Login' (data-testid='user-login'), table has 'Login' column header, role selector offers three options: 'Administrador', 'Vendedor', and 'Produção'. (8) Re-login with 'Igor' confirmed working. Console shows only minor chart warnings and expected 401s for pre-login /auth/me checks. All requirements from review request validated successfully."
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 4
+  test_sequence: 7
   run_ui: true
 test_plan:
   current_focus:
-    - "All login testing complete - ready for summary"
+    - "Login UI migration testing complete"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -177,3 +180,10 @@ agent_communication:
     message: "✅ BACKEND CORS CONFIGURATION VERIFIED - Testing completed for CORS fix. Backend server.py has been updated with CORS middleware using explicit FRONTEND_URL origin (line 36-38), placed immediately after FastAPI app creation. Direct backend testing (localhost:8001) confirms: (1) OPTIONS preflight returns 200 OK with all correct CORS headers including Access-Control-Allow-Origin matching frontend origin exactly. (2) POST /api/auth/login works with correct CORS headers. (3) Admin login successful with role=admin. (4) GET /api/auth/me works correctly. INFRASTRUCTURE ISSUE IDENTIFIED: Public URL tests show Kubernetes ingress/proxy is stripping the Access-Control-Allow-Origin header (OPTIONS returns 400, POST missing header), but this is NOT a backend code issue - the backend is configured correctly as proven by localhost tests. The CORS fix requested has been completed successfully in the backend code. Frontend testing should proceed to verify if browser handles this differently than curl."
   - agent: "testing"
     message: "✅ FINAL E2E LOGIN TESTING COMPLETE AFTER CORS FIX - Tested login flow in clean browser session from public URL (https://eb37b9d8-61b4-46ff-bf7b-5fcd9d03495c.preview.emergentagent.com/login). ALL 5 VALIDATION REQUIREMENTS PASSED: (1) NO 'Erro desconhecido' message anywhere. (2) POST /api/auth/login returns 200 OK with valid token and admin role. (3) Navigation from /login to / successful. (4) Dashboard shows 'Administrador' in sidebar. (5) Subsequent API calls use Bearer token (2 authenticated requests confirmed). Console shows only expected 401s for pre-login checks and minor chart warnings. Network analysis confirms correct request URL, CORS headers present (access-control-allow-credentials: true), token stored in localStorage. The ingress/proxy adds wildcard CORS headers to some responses, but this does NOT break functionality - login works perfectly. The user's reported 'Erro desconhecido' issue is RESOLVED. Ready for main agent to summarize and finish."
+  - agent: "main"
+    message: "Nova etapa: login migrado de email para usuário. O contrato agora usa {login, password}; Igor é o admin, vendedor foi migrado para login vendedor e a role producao foi adicionada ao gerenciamento."
+  - agent: "testing"
+    message: "✅ LOGIN-BASED AUTHENTICATION MIGRATION COMPLETE - All 32 backend tests passed. The authentication system has been successfully migrated from email-based to login-based. Key findings: (1) Backend startup migration working correctly - ensure_user_logins() migrates all existing users to have login field. (2) Admin login 'Igor' works with case-insensitive matching (Igor/igor both work). (3) Legacy email is correctly rejected as login identifier. (4) Vendor login 'vendedor' works correctly. (5) GET /api/auth/me works for both admin and vendor. (6) User management accepts role=producao and rejects invalid roles. (7) No duplicate Igor login exists. (8) All users have login field in GET /api/users response. Backend authentication migration is complete and fully functional. Frontend testing is NOT in scope for this testing session per system instructions."
+  - agent: "testing"
+    message: "✅ LOGIN UI MIGRATION TESTING COMPLETE - Comprehensive E2E testing performed with 8 test scenarios covering all review request requirements. ALL TESTS PASSED: (1) Login page has text field (NOT email) with label 'Login' and data-testid='login-username'. (2) Login with 'Igor'/02578491 works, POST /api/auth/login uses {\"login\":\"Igor\",\"password\":\"02578491\"} and returns 200 OK. (3) Case-insensitive login confirmed: 'igor' (lowercase) also works. (4) User navigates to dashboard and sees 'Administrador' displayed. (5) Old email 'festasegraficariosul@gmail.com' correctly rejected with 401 Unauthorized. (6) Logout and re-login with Igor works. (7) /funcionarios page verified: form has 'Login' placeholder, table has 'Login' column, role selector offers Administrador/Vendedor/Produção. Console shows only minor chart warnings and expected 401s. The login migration from email to username is fully functional in both backend and frontend. Ready for main agent to summarize and finish."
+
